@@ -1064,7 +1064,21 @@ void winmain::PollGamepads()
 
 int winmain::ProcessWindowMessages()
 {
-	glfwPollEvents();
+	// Nothing in MainLoop runs while the window is unfocused, so block here for events
+	// instead of polling in a tight loop and burning a whole core. Mirrors the SDL
+	// build, which waited with a timeout that grew the longer the game stayed idle.
+	static auto idleWait = 0;
+	if (has_focus)
+	{
+		idleWait = static_cast<int>(TargetFrameTime.count());
+		glfwPollEvents();
+	}
+	else
+	{
+		idleWait = std::min(idleWait + static_cast<int>(TargetFrameTime.count()), 500);
+		glfwWaitEventsTimeout(idleWait / 1000.0);
+	}
+
 	PollGamepads();
 
 	// The Exit menu item and the exit dialog request a close with
