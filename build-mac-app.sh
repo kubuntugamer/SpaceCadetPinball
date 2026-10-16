@@ -11,7 +11,7 @@
 set -xe
 
 app_name='SpaceCadetPinball'
-sw_version='2.1.1'
+sw_version='2.2.0'
 dmg_name="${app_name}-${sw_version}-mac.dmg"
 
 brew_prefix=''

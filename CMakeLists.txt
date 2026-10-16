@@ -256,6 +256,6 @@ endif()
 # Packaging: the binary only, game data is provided by the user.
 set(CPACK_PACKAGE_NAME "SpaceCadetPinball")
 set(CPACK_PACKAGE_VENDOR "SpaceCadetPinball")
-set(CPACK_PACKAGE_VERSION "2.1.1")
+set(CPACK_PACKAGE_VERSION "2.2.0")
 set(CPACK_GENERATOR "TGZ;ZIP")
 include(CPack)

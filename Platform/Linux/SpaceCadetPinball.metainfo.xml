@@ -28,6 +28,20 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.0" date="2026-10-16">
+            <description>
+                <p>Packaging and input-fix release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>A Windows installer (NSIS) with shortcuts, an Add/Remove Programs entry and an uninstaller.</li>
+                    <li>Windows release builds for x86 and x64, produced by CI.</li>
+                    <li>A SoundFont shipped next to the executable is used automatically, so packaged builds work without configuration.</li>
+                    <li>Control bindings are migrated once when upgrading from the SDL2-based build.</li>
+                    <li>The menu bar no longer swallows mouse clicks meant for the flippers.</li>
+                    <li>The game no longer spins a CPU core while its window is unfocused.</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.1.1" date="2026-10-15">
             <description>
                 <p>Platform modernization release.</p>

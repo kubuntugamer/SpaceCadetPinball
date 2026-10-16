@@ -61,3 +61,38 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# GitHub language statistics
+#
+# These files are third-party sources, not project code; marking them vendored
+# keeps the language breakdown of the repository meaningful.
+###############################################################################
+SpaceCadetPinball/miniaudio.h           linguist-vendored
+SpaceCadetPinball/imgui.cpp             linguist-vendored
+SpaceCadetPinball/imgui_demo.cpp        linguist-vendored
+SpaceCadetPinball/imgui_draw.cpp        linguist-vendored
+SpaceCadetPinball/imgui_tables.cpp      linguist-vendored
+SpaceCadetPinball/imgui_widgets.cpp     linguist-vendored
+SpaceCadetPinball/imgui.h               linguist-vendored
+SpaceCadetPinball/imgui_internal.h      linguist-vendored
+SpaceCadetPinball/imstb_*.h             linguist-vendored
+SpaceCadetPinball/imgui_impl_glfw.cpp   linguist-vendored
+SpaceCadetPinball/imgui_impl_glfw.h     linguist-vendored
+SpaceCadetPinball/imgui_impl_vulkan.cpp linguist-vendored
+SpaceCadetPinball/imgui_impl_vulkan.h   linguist-vendored
+
+###############################################################################
+# Binary assets: never diff or merge them as text. They are not distributed
+# with the source, but user-supplied copies sit in the working tree.
+###############################################################################
+*.ico   binary
+*.icns  binary
+*.png   binary
+*.jpg   binary
+*.bmp   binary
+*.wav   binary
+*.sf2   binary
+*.sf3   binary
+*.DAT   binary
+*.dat   binary

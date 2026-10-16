@@ -313,3 +313,12 @@ _deps
 build.ninja
 # Build directory
 /build
+
+# Windows installer and portable packaging (see Platform/Windows/BUILD.md):
+# inputs are the user's game data and SoundFont, outputs are build artifacts.
+/SpaceCadetPinball-Setup.exe
+/soundfonts/
+*.sf2
+*.sf3
+/portable/
+/wineprefix/
