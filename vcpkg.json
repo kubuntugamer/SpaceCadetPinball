@@ -3,7 +3,15 @@
   "version-string": "2.1.1",
   "dependencies": [
     "glfw3",
-    "vulkan",
-    "fluidsynth"
-  ]
+    "vulkan"
+  ],
+  "features": {
+    "music": {
+      "description": "MIDI music playback via FluidSynth (also needs a General MIDI SoundFont at runtime)",
+      "dependencies": [
+        "fluidsynth"
+      ]
+    }
+  },
+  "default-features": []
 }

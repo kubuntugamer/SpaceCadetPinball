@@ -233,6 +233,12 @@ if(UNIX)
     target_link_libraries(SpaceCadetPinball dl pthread m)
 endif()
 
+# miniaudio's Win32 backends need winmm; ole32/shell32 are already part of
+# CMake's default MSVC standard libraries.
+if(WIN32)
+    target_link_libraries(SpaceCadetPinball winmm)
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS "${PROJECT_NAME}"
 	RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"

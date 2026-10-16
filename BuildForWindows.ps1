@@ -13,8 +13,10 @@ if (-not $env:VCPKG_ROOT) {
 $toolchain = (Join-Path $env:VCPKG_ROOT "scripts/buildsystems/vcpkg.cmake")
 
 function New-Release([string]$architecture, [string]$triplet, [string]$zipName) {
-    Remove-Item -Path .\build\CMakeCache.txt -ErrorAction SilentlyContinue
-    cmake -S . -B build -A $architecture -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_TOOLCHAIN_FILE="$toolchain"
+    # Start fresh so the two architectures don't share stale build/vcpkg state.
+    # (Do not touch .\bin: it may hold the user's game data.)
+    Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
+    cmake -S . -B build -A $architecture -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_MANIFEST_FEATURES=music
     cmake --build build --config Release
 
     # Copy the runtime DLLs vcpkg installed next to the executable.
