@@ -3,33 +3,41 @@
 
 #include <string>
 
-// Lightweight self-update helper. Checks the project's GitHub releases for a
-// newer version, downloads the platform-appropriate asset and hands it off to
-// the OS. All network work happens on a background thread; the UI polls the
-// status each frame.
+// Self-update helper. Checks the project's GitHub releases for a newer version.
+// On Linux, when the running binary is owned by a package manager (dpkg/rpm),
+// the update is performed through that package manager (pkexec apt/dnf) after
+// downloading the .deb/.rpm from the release; otherwise the platform asset is
+// downloaded and handed off to the OS.
 namespace update {
 
-enum class Status { Idle, Checking, Available, UpToDate, Error };
+enum class Status { Idle, Checking, Available, UpToDate, Error, Installing, Installed };
 
 struct ReleaseInfo {
-	std::string version;       // e.g. "2.2.3" (tag without prefix)
-	std::string release_url;   // html_url of the release
-	std::string download_url;  // browser_download_url of the platform asset
-	std::string notes;         // release body (markdown)
+	std::string version;
+	std::string release_url;
+	std::string download_url;   // platform asset (portable flow)
+	std::string package_url;    // .deb/.rpm asset when applicable
+	std::string notes;
 };
 
 Status GetStatus();
 const ReleaseInfo& GetInfo();
 const std::string& GetError();
-float GetProgress();          // 0..1 while downloading
+float GetProgress();
 
-void CheckAsync();            // start a background check (no-op if busy)
-void DownloadAsync();         // download the available asset (no-op if busy)
-void OpenReleasePage();       // open release_url in the browser
-void Reset();                 // back to Idle
+bool IsPackageManaged();     // true if dpkg/rpm owns the running binary
+
+void CheckAsync();            // background check (no-op if busy)
+void InstallAsync();          // download + install (package manager or portable)
+void OpenReleasePage();
+
+void Reset();
 
 // Draw the update dialog. Call every frame from the UI thread.
 void Render();
+
+// Trigger a check on startup if the user has it enabled. Call once.
+void CheckOnStartup();
 
 } // namespace update
 

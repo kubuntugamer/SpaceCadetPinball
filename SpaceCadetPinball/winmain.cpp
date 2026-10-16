@@ -711,6 +711,12 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 			ImGui::Separator();
+			// reuse a simple checkbox for the update setting
+			if (ImGui::MenuItem("Check for Updates on Startup", nullptr, Options.CheckForUpdatesOnStartup.V))
+			{
+				Options.CheckForUpdatesOnStartup.V ^= true;
+			}
+			ImGui::Separator();
 			if (ImGui::MenuItem("Reset All Options"))
 			{
 				options::ResetAllOptions();

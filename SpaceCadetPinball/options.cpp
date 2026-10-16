@@ -157,6 +157,7 @@ optionsStruct options::Options
 	{"FontFileName", ""},
 	{"Language", translations::GetCurrentLanguage()->ShortName},
 	{"Hide Cursor", false},
+	{"Check for Updates on Startup", true},
 };
 
 void options::InitPrimary()

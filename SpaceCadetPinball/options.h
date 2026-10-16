@@ -289,4 +289,5 @@ struct optionsStruct
 	StringOption FontFileName;
 	StringOption Language;
 	BoolOption HideCursor;
+	BoolOption CheckForUpdatesOnStartup;
 };
