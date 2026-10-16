@@ -228,7 +228,7 @@ TPinballComponent* TPinballTable::find_component(LPCSTR componentName)
 		}
 	}
 
-	pb::ShowMessageBox(SDL_MESSAGEBOX_WARNING, "Table cant find:", componentName);
+	pb::ShowMessageBox(MessageBoxIcon::Warning, "Table cant find:", componentName);
 	return nullptr;
 }
 
@@ -242,7 +242,7 @@ TPinballComponent* TPinballTable::find_component(int groupIndex)
 	}
 
 	snprintf(Buffer, sizeof Buffer, "%d", groupIndex);
-	pb::ShowMessageBox(SDL_MESSAGEBOX_WARNING, "Table cant find (lh):", Buffer);
+	pb::ShowMessageBox(MessageBoxIcon::Warning, "Table cant find (lh):", Buffer);
 	return nullptr;
 }
 

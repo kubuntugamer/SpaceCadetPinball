@@ -8,6 +8,7 @@
 #include "winmain.h"
 #include "TTextBox.h"
 #include "fullscrn.h"
+#include "vkrender.h"
 
 ColorRgba gdrv::current_palette[256]{};
 
@@ -87,7 +88,7 @@ gdrv_bitmap8::~gdrv_bitmap8()
 		delete[] BmpBufPtr1;
 		delete[] IndexedBmpPtr;
 		if (Texture)
-			SDL_DestroyTexture(Texture);
+			vkrender::destroy_texture(Texture);
 	}
 }
 
@@ -123,42 +124,27 @@ void gdrv_bitmap8::ScaleIndexed(float scaleX, float scaleY)
 	BmpBufPtr1 = new ColorRgba[Stride * Height];
 }
 
-void gdrv_bitmap8::CreateTexture(const char* scaleHint, int access)
+void gdrv_bitmap8::CreateTexture(const char* scaleHint)
 {
+	// scaleHint is retained for API compatibility ("nearest"/"linear").
+	(void)scaleHint;
+
 	if (Texture != nullptr)
+		vkrender::destroy_texture(Texture);
+
+	if (!BmpBufPtr1 || Width <= 0 || Height <= 0)
 	{
-		SDL_DestroyTexture(Texture);
+		Texture = nullptr;
+		return;
 	}
 
-	UsingSdlHint hint{ SDL_HINT_RENDER_SCALE_QUALITY, scaleHint };
-	Texture = SDL_CreateTexture
-	(
-		winmain::Renderer,
-		SDL_PIXELFORMAT_BGRA32,
-		access,
-		Width, Height
-	);
-	SDL_SetTextureBlendMode(Texture, SDL_BLENDMODE_NONE);
+	Texture = vkrender::create_texture(BmpBufPtr1, Width, Height, Stride * static_cast<int>(sizeof(ColorRgba)));
 }
 
 void gdrv_bitmap8::BlitToTexture()
 {
 	assertm(Texture, "Updating null texture");
-	int pitch = 0;
-	ColorRgba* lockedPixels;
-	auto result = SDL_LockTexture
-	(
-		Texture,
-		nullptr,
-		reinterpret_cast<void**>(&lockedPixels),
-		&pitch
-	);
-	assertm(result == 0, "Updating non-streaming texture");
-	assertm(static_cast<unsigned>(pitch) == Width * sizeof(ColorRgba), "Padding on vScreen texture");
-
-	std::memcpy(lockedPixels, BmpBufPtr1, Width * Height * sizeof(ColorRgba));
-
-	SDL_UnlockTexture(Texture);
+	vkrender::update_texture(Texture, BmpBufPtr1, Width, Height, Stride * static_cast<int>(sizeof(ColorRgba)));
 }
 
 int gdrv::display_palette(ColorRgba* plt)
@@ -306,6 +292,5 @@ void gdrv::CreatePreview(gdrv_bitmap8& bmp)
 	if (bmp.Texture)
 		return;
 
-	bmp.CreateTexture("nearest", SDL_TEXTUREACCESS_STATIC);
-	SDL_UpdateTexture(bmp.Texture, nullptr, bmp.BmpBufPtr1, bmp.Width * 4);
+	bmp.CreateTexture("nearest");
 }

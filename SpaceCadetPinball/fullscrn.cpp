@@ -6,12 +6,14 @@
 #include "pb.h"
 #include "render.h"
 #include "winmain.h"
+#include "vkrender.h"
 
 
 int fullscrn::screen_mode;
 int fullscrn::display_changed;
 
 int fullscrn::resolution = 0;
+int fullscrn::savedWindowX = 0, fullscrn::savedWindowY = 0, fullscrn::savedWindowW = 0, fullscrn::savedWindowH = 0;
 const resolution_info fullscrn::resolution_array[3] =
 {
 	{640, 480, 600, 416, 501},
@@ -55,10 +57,17 @@ int fullscrn::set_screen_mode(int isFullscreen)
 
 int fullscrn::enableFullscreen()
 {
-	if (!display_changed)
+	if (!display_changed && winmain::MainWindow)
 	{
-		if (SDL_SetWindowFullscreen(winmain::MainWindow, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0)
+		// Save the windowed position/size so we can restore it later.
+		glfwGetWindowPos(winmain::MainWindow, &savedWindowX, &savedWindowY);
+		glfwGetWindowSize(winmain::MainWindow, &savedWindowW, &savedWindowH);
+
+		auto monitor = glfwGetPrimaryMonitor();
+		if (monitor)
 		{
+			const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+			glfwSetWindowMonitor(winmain::MainWindow, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
 			display_changed = 1;
 			return 1;
 		}
@@ -68,10 +77,11 @@ int fullscrn::enableFullscreen()
 
 int fullscrn::disableFullscreen()
 {
-	if (display_changed)
+	if (display_changed && winmain::MainWindow)
 	{
-		if (SDL_SetWindowFullscreen(winmain::MainWindow, 0) == 0)
-			display_changed = 0;
+		glfwSetWindowMonitor(winmain::MainWindow, nullptr, savedWindowX, savedWindowY,
+		                     savedWindowW > 0 ? savedWindowW : 800, savedWindowH > 0 ? savedWindowH : 556, 0);
+		display_changed = 0;
 	}
 
 	return 0;
@@ -109,7 +119,7 @@ int fullscrn::GetMaxResolution()
 void fullscrn::window_size_changed()
 {
 	int width, height;
-	SDL_GetRendererOutputSize(winmain::Renderer, &width, &height);
+	vkrender::get_drawable_size(&width, &height);
 	int menuHeight = options::Options.ShowMenu ? winmain::MainMenuHeight : 0;
 	height -= menuHeight;
 	auto res = &resolution_array[resolution];
@@ -134,16 +144,16 @@ void fullscrn::window_size_changed()
 	OffsetX = offset2X / 2;
 	OffsetY = offset2Y / 2;
 
-	render::DestinationRect = SDL_Rect
+	render::DestinationRect = PBRect
 	{
 		OffsetX, OffsetY + menuHeight,
 		width - offset2X, height - offset2Y
 	};
 }
 
-SDL_Rect fullscrn::GetScreenRectFromPinballRect(SDL_Rect rect)
+PBRect fullscrn::GetScreenRectFromPinballRect(PBRect rect)
 {
-	SDL_Rect converted_rect;
+	PBRect converted_rect;
 
 	converted_rect.x = rect.x * render::DestinationRect.w / render::vscreen->Width + render::DestinationRect.x;
 	converted_rect.y = rect.y * render::DestinationRect.h / render::vscreen->Height + render::DestinationRect.y;

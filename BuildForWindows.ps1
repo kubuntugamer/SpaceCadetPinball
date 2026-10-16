@@ -1,20 +1,33 @@
-#Run this script from Developer Command Prompt for VS *
-$artefacts = ".\bin\Release\SpaceCadetPinball.exe", ".\bin\Release\SDL2.dll", ".\bin\Release\SDL2_mixer.dll"
+# Run this script from a Developer Command Prompt for VS *.
+#
+# Dependencies (glfw3, the Vulkan loader and fluidsynth) are provided by vcpkg in
+# manifest mode; install vcpkg and set $env:VCPKG_ROOT before running this script.
+# The Vulkan SDK is not required, the loader is bundled from the vcpkg package.
 
-#X86 build
-Remove-Item -Path .\build\CMakeCache.txt -ErrorAction SilentlyContinue
-cmake -S . -B build -A Win32 -DCMAKE_WIN32_EXECUTABLE:BOOL=1
-cmake --build build --config Release
-Compress-Archive -Path $artefacts -DestinationPath ".\bin\SpaceCadetPinballx86Win.zip" -Force
+$ErrorActionPreference = "Stop"
 
-#X64 build
-Remove-Item -Path .\build\CMakeCache.txt
-cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1
-cmake --build build --config Release
-Compress-Archive -Path $artefacts -DestinationPath ".\bin\SpaceCadetPinballx64Win.zip" -Force
+if (-not $env:VCPKG_ROOT) {
+    Write-Error "VCPKG_ROOT is not set. Install vcpkg (https://vcpkg.io) and set `$env:VCPKG_ROOT."
+}
 
-#86 XP build, requires special XP MSVC toolset
-Remove-Item -Path .\build\CMakeCache.txt
-cmake -S . -B build -A Win32 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -T v141_xp
-cmake --build build --config Release
-Compress-Archive -Path $artefacts -DestinationPath ".\bin\SpaceCadetPinballx86WinXP.zip" -Force
+$toolchain = (Join-Path $env:VCPKG_ROOT "scripts/buildsystems/vcpkg.cmake")
+
+function New-Release([string]$architecture, [string]$triplet, [string]$zipName) {
+    Remove-Item -Path .\build\CMakeCache.txt -ErrorAction SilentlyContinue
+    cmake -S . -B build -A $architecture -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_TOOLCHAIN_FILE="$toolchain"
+    cmake --build build --config Release
+
+    # Copy the runtime DLLs vcpkg installed next to the executable.
+    $installed = ".\build\vcpkg_installed\$triplet\bin"
+    if (Test-Path $installed) {
+        Copy-Item "$installed\*.dll" ".\bin\Release" -Force
+    }
+
+    Compress-Archive -Path ".\bin\Release\*" -DestinationPath ".\bin\$zipName" -Force
+}
+
+# X86 build
+New-Release -architecture Win32 -triplet x86-windows -zipName "SpaceCadetPinballx86Win.zip"
+
+# X64 build
+New-Release -architecture x64 -triplet x64-windows -zipName "SpaceCadetPinballx64Win.zip"

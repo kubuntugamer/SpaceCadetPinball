@@ -11,11 +11,87 @@
 #include "Sound.h"
 #include "translations.h"
 #include "font_selection.h"
+#include "vkrender.h"
+
+#include <GLFW/glfw3.h>
+
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#else
+#include <unistd.h>
+#include <sys/stat.h>
+#endif
+
+namespace
+{
+	std::string GetExecutableDir()
+	{
+#ifdef _WIN32
+		char buf[MAX_PATH];
+		DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+		if (len == 0 || len >= MAX_PATH)
+			return {};
+		std::string path(buf, len);
+		auto pos = path.find_last_of("\\/");
+		return pos == std::string::npos ? std::string{} : path.substr(0, pos + 1);
+#else
+		char buf[4096];
+		auto len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+		if (len <= 0)
+			return {};
+		buf[len] = '\0';
+		std::string path(buf);
+		auto pos = path.find_last_of('/');
+		return pos == std::string::npos ? std::string{} : path.substr(0, pos + 1);
+#endif
+	}
+
+	std::string GetPrefPath()
+	{
+#ifdef _WIN32
+		const char* appData = getenv("APPDATA");
+		std::string base = appData ? appData : ".";
+		base += "\\SpaceCadetPinball\\";
+		CreateDirectoryA(base.c_str(), nullptr);
+		return base;
+#else
+		const char* xdg = getenv("XDG_DATA_HOME");
+		std::string base;
+		if (xdg && xdg[0])
+			base = xdg;
+		else
+		{
+			const char* home = getenv("HOME");
+			base = home ? home : ".";
+			base += "/.local/share";
+		}
+		base += "/SpaceCadetPinball/";
+		mkdir(base.c_str(), 0755);
+		return base;
+#endif
+	}
+
+	void OpenURL(const char* url)
+	{
+#ifdef _WIN32
+		ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#else
+		std::string cmd = "xdg-open \"";
+		cmd += url;
+		cmd += "\" >/dev/null 2>&1 &";
+		if (system(cmd.c_str()) != 0)
+			printf("Failed to open URL: %s\n", url);
+#endif
+	}
+}
 
 constexpr const char* winmain::Version;
 
-SDL_Window* winmain::MainWindow = nullptr;
-SDL_Renderer* winmain::Renderer = nullptr;
+GLFWwindow* winmain::MainWindow = nullptr;
 ImGuiIO* winmain::ImIO = nullptr;
 
 int winmain::return_value = 0;
@@ -43,8 +119,7 @@ bool winmain::LaunchBallEnabled = true;
 bool winmain::HighScoresEnabled = true;
 bool winmain::DemoActive = false;
 int winmain::MainMenuHeight = 0;
-std::string winmain::FpsDetails, winmain::PrevSdlError;
-unsigned winmain::PrevSdlErrorCount = 0;
+std::string winmain::FpsDetails;
 double winmain::UpdateToFrameRatio;
 winmain::DurationMs winmain::TargetFrameTime;
 optionsStruct& winmain::Options = options::Options;
@@ -58,96 +133,52 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 
 	printf("Game version: %s\n", Version);
 	printf("Command line: %s\n", lpCmdLine);
-	printf("Compiled with: SDL %d.%d.%d;", SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
-	printf(" SDL_mixer %d.%d.%d;", SDL_MIXER_MAJOR_VERSION, SDL_MIXER_MINOR_VERSION, SDL_MIXER_PATCHLEVEL);
-	printf(" ImGui %s %s\n", IMGUI_VERSION, ImGuiRender);
+	printf("Compiled with: GLFW; Vulkan; ImGui %s\n", IMGUI_VERSION);
 
-	// SDL init
-	SDL_SetMainReady();
-	if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO |
-		SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
+	// GLFW init
+	glfwSetErrorCallback([](int error, const char* description)
 	{
-		pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2", SDL_GetError());
+		printf("GLFW Error %d: %s\n", error, description);
+	});
+	if (!glfwInit())
+	{
+		pb::ShowMessageBox(MessageBoxIcon::Error, "Could not initialize GLFW", "glfwInit failed");
 		return 1;
 	}
 
 	pb::quickFlag = strstr(lpCmdLine, "-quick") != nullptr;
 
-	// SDL window
-	SDL_Window* window = SDL_CreateWindow
+	// GLFW window (Vulkan manages the client API, so no OpenGL context here)
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+	GLFWwindow* window = glfwCreateWindow
 	(
-		pb::get_rc_string(Msg::STRING139),
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		800, 556,
-		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE
+		pb::get_rc_string(Msg::STRING139),
+		nullptr,
+		nullptr
 	);
 	MainWindow = window;
 	if (!window)
 	{
-		pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, "Could not create window", SDL_GetError());
+		const char* desc = nullptr;
+		glfwGetError(&desc);
+		pb::ShowMessageBox(MessageBoxIcon::Error, "Could not create window", desc ? desc : "");
+		glfwTerminate();
 		return 1;
 	}
 
-	// If HW fails, fallback to SW SDL renderer.
-	SDL_Renderer* renderer = nullptr;
-	auto swOffset = strstr(lpCmdLine, "-sw") != nullptr ? 1 : 0;
-	for (int i = swOffset; i < 2 && !renderer; i++)
-	{
-		Renderer = renderer = SDL_CreateRenderer
-		(
-			window,
-			-1,
-			i == 0 ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE
-		);
-	}
-	if (!renderer)
-	{
-		pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, "Could not create renderer", SDL_GetError());
-		return 1;
-	}
-	SDL_RendererInfo rendererInfo{};
-	if (!SDL_GetRendererInfo(renderer, &rendererInfo))
-		printf("Using SDL renderer: %s\n", rendererInfo.name);
-	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+	// Install game input callbacks before ImGui so ImGui chains into them.
+	InstallCallbacks(window);
 
-	auto prefPath = SDL_GetPrefPath("", "SpaceCadetPinball");
-	auto basePath = SDL_GetBasePath();
+	auto basePathStr = GetExecutableDir();
+	auto prefPathStr = GetPrefPath();
+	const char* basePath = basePathStr.c_str();
+	const char* prefPath = prefPathStr.c_str();
 
-	// SDL mixer init
-	bool mixOpened = false, noAudio = strstr(lpCmdLine, "-noaudio") != nullptr;
-	if (!noAudio)
-	{
-		if ((Mix_Init(MIX_INIT_MID_Proxy) & MIX_INIT_MID_Proxy) == 0)
-		{
-			printf("Could not initialize SDL MIDI, music might not work.\nSDL Error: %s\n", SDL_GetError());
-			SDL_ClearError();
-		}
-		if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 1024) != 0)
-		{
-			printf("Could not open audio device, continuing without audio.\nSDL Error: %s\n", SDL_GetError());
-			SDL_ClearError();
-		}
-		else
-			mixOpened = true;
-	}
-
-	{
-		// Load SDL Game Controller definitions from DB
-		unsigned decompressedSize{};
-		const auto controllerDb = ImFontAtlas::DecompressCompressedStbData(
-			EmbeddedData::SDL_GameControllerDB_compressed_data,
-			EmbeddedData::SDL_GameControllerDB_compressed_size,
-			decompressedSize);
-		auto rw = SDL_RWFromMem(controllerDb, decompressedSize);
-		const auto added = SDL_GameControllerAddMappingsFromRW(rw, 1);
-		IM_FREE(controllerDb);
-		if (added < 0)
-		{
-			printf("Could not load game controller DB.\nSDL Error: %s\n", SDL_GetError());
-			SDL_ClearError();
-		}
-	}
+	// Audio is initialized by Sound::Init() further down.
+	bool noAudio = strstr(lpCmdLine, "-noaudio") != nullptr;
 
 	auto resetAllOptions = strstr(lpCmdLine, "-reset") != nullptr;
 	do
@@ -197,10 +228,20 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 				printf("Failed to load font: %s, using embedded font.\n", fileName);
 			io.Fonts->Build();
 		}
-		ImGui_Render_Init(renderer);
-		ImGui::StyleColorsDark();
+		// Initialize the Vulkan renderer and its ImGui Vulkan backend. The font
+		// atlas must already be set up above so that it gets uploaded here.
+		if (!vkrender::init(window))
+		{
+			pb::ShowMessageBox(MessageBoxIcon::Error, "Could not initialize renderer",
+			                   "Failed to initialize the Vulkan renderer.");
+			return 1;
+		}
 
-		ImGui_ImplSDL2_InitForSDLRenderer(window, Renderer);
+		// ImGui platform backend. We install GLFW callbacks ourselves (above)
+		// and forward events to these backend functions, so ImGui must not
+		// install its own callbacks (that would recurse).
+		ImGui_ImplGlfw_InitForVulkan(window, false);
+		ImGui::StyleColorsDark();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
 
 		// Data search order: WD, executable path, user pref path, platform specific paths.
@@ -218,11 +259,11 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		// Second step: run updates that depend on .DAT file selection
 		options::InitSecondary();
 
-		Sound::Init(mixOpened, Options.SoundChannels, Options.Sounds, Options.SoundVolume);
-		if (!mixOpened)
+		Sound::Init(!noAudio, Options.SoundChannels, Options.Sounds, Options.SoundVolume);
+		if (noAudio)
 			Options.Sounds = false;
 
-		if (!midi::music_init(mixOpened, Options.MusicVolume))
+		if (!midi::music_init(!noAudio, Options.MusicVolume))
 			Options.Music = false;
 
 		if (pb::init())
@@ -236,7 +277,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 					message = message + (path[0] ? path : "working directory") + "\n";
 				}
 			}
-			pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, "Could not load game data", message.c_str());
+			pb::ShowMessageBox(MessageBoxIcon::Error, "Could not load game data", message.c_str());
 			return 1;
 		}
 
@@ -253,9 +294,9 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		if (!Options.FullScreen)
 		{
 			auto resInfo = &fullscrn::resolution_array[fullscrn::GetResolution()];
-			SDL_SetWindowSize(MainWindow, resInfo->TableWidth, resInfo->TableHeight);
+			glfwSetWindowSize(MainWindow, resInfo->TableWidth, resInfo->TableHeight);
 		}
-		SDL_ShowWindow(window);
+		glfwShowWindow(window);
 		fullscrn::set_screen_mode(Options.FullScreen);
 
 		if (strstr(lpCmdLine, "-demo"))
@@ -266,28 +307,20 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		MainLoop();
 
 		options::uninit();
-		midi::music_shutdown();
+		// Stop the audio device first: the music synth is rendered from the
+		// audio callback, so it must not be torn down while that is running.
 		Sound::Close();
+		midi::music_shutdown();
 		pb::uninit();
 
-		ImGui_Render_Shutdown();
-		ImGui_ImplSDL2_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		vkrender::shutdown();
 		ImGui::DestroyContext();
 	}
 	while (restart);
 
-	if (!noAudio)
-	{
-		if (mixOpened)
-			Mix_CloseAudio();
-		Mix_Quit();
-	}
-
-	SDL_free(basePath);
-	SDL_free(prefPath);
-	SDL_DestroyRenderer(renderer);
-	SDL_DestroyWindow(window);
-	SDL_Quit();
+	glfwDestroyWindow(window);
+	glfwTerminate();
 
 	return return_value;
 }
@@ -312,7 +345,7 @@ void winmain::MainLoop()
 				auto elapsedSec = DurationMs(curTime - prevTime).count() * 0.001;
 				snprintf(buf, sizeof buf, "Updates/sec = %02.02f Frames/sec = %02.02f ",
 				         updateCounter / elapsedSec, frameCounter / elapsedSec);
-				SDL_SetWindowTitle(MainWindow, buf);
+				glfwSetWindowTitle(MainWindow, buf);
 				FpsDetails = buf;
 				frameCounter = updateCounter = 0;
 				prevTime = curTime;
@@ -326,9 +359,11 @@ void winmain::MainLoop()
 		{
 			if (mouse_down)
 			{
-				int x, y, w, h;
-				SDL_GetMouseState(&x, &y);
-				SDL_GetWindowSize(MainWindow, &w, &h);
+				int w, h;
+				double mx, my;
+				glfwGetCursorPos(MainWindow, &mx, &my);
+				glfwGetWindowSize(MainWindow, &w, &h);
+				int x = static_cast<int>(mx), y = static_cast<int>(my);
 				float dx = static_cast<float>(last_mouse_x - x) / static_cast<float>(w);
 				float dy = static_cast<float>(y - last_mouse_y) / static_cast<float>(h);
 				pb::ballset(dx, dy);
@@ -345,7 +380,7 @@ void winmain::MainLoop()
 					// Mouse warp does not work over remote desktop or in some VMs
 					x = abs(x - xMod);
 					y = abs(y - yMod);
-					SDL_WarpMouseInWindow(MainWindow, x, y);
+					glfwSetCursorPos(MainWindow, x, y);
 				}
 
 				last_mouse_x = x;
@@ -374,48 +409,18 @@ void winmain::MainLoop()
 			{
 				if (Options.HideCursor && CursorIdleCounter <= 0)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-				ImGui_ImplSDL2_NewFrame();
-				ImGui_Render_NewFrame();
+				ImGui_ImplVulkan_NewFrame();
+				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
 				RenderUi();
 
-				SDL_RenderClear(Renderer);
-				// Alternative clear hack, clear might fail on some systems
-				// Todo: remove original clear, if save for all platforms
-				SDL_RenderFillRect(Renderer, nullptr);
 				render::PresentVScreen();
 
 				ImGui::Render();
-				ImGui_Render_RenderDrawData(ImGui::GetDrawData());
+				vkrender::render_frame(ImGui::GetDrawData());
 
-				SDL_RenderPresent(Renderer);
 				frameCounter++;
 				UpdateToFrameCounter -= UpdateToFrameRatio;
-			}
-
-			auto sdlError = SDL_GetError();
-			if (sdlError[0] || !PrevSdlError.empty())
-			{
-				if (sdlError[0])
-					SDL_ClearError();
-
-				// Rate limit duplicate SDL error messages.
-				if (sdlError != PrevSdlError)
-				{
-					PrevSdlError = sdlError;
-					if (PrevSdlErrorCount > 0)
-					{
-						printf("SDL Error: ^ Previous Error Repeated %u Times\n", PrevSdlErrorCount + 1);
-						PrevSdlErrorCount = 0;
-					}
-
-					if (sdlError[0])
-						printf("SDL Error: %s\n", sdlError);
-				}
-				else
-				{
-					PrevSdlErrorCount++;
-				}
 			}
 
 			auto updateEnd = Clock::now();
@@ -444,11 +449,6 @@ void winmain::MainLoop()
 
 			CursorIdleCounter = std::max(CursorIdleCounter - static_cast<int>(frameDuration.count()), 0);
 		}
-	}
-
-	if (PrevSdlErrorCount > 0)
-	{
-		printf("SDL Error: ^ Previous Error Repeated %u Times\n", PrevSdlErrorCount);
 	}
 }
 
@@ -813,8 +813,7 @@ void winmain::RenderUi()
 
 		if (ImGui::Button(pb::get_rc_string(Msg::GenericOk), ImVec2(120, 0)))
 		{
-			SDL_Event event{SDL_QUIT};
-			SDL_PushEvent(&event);
+			glfwSetWindowShouldClose(MainWindow, GLFW_TRUE);
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
@@ -835,242 +834,230 @@ void winmain::RenderUi()
 	gdrv::grtext_draw_ttext_in_box();
 }
 
-int winmain::event_handler(const SDL_Event* event)
-{
-	auto inputDown = false;
-	switch (event->type)
-	{
-	case SDL_KEYDOWN:
-	case SDL_MOUSEBUTTONDOWN:
-	case SDL_CONTROLLERBUTTONDOWN:
-		inputDown = true;
-		break;
-	default: break;
-	}
-	if (!options::WaitingForInput() || !inputDown)
-		ImGui_ImplSDL2_ProcessEvent(event);
+static bool GamepadPrev[GLFW_JOYSTICK_LAST + 1][GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
 
-	bool mouseEvent;
-	switch (event->type)
+void winmain::InstallCallbacks(GLFWwindow* window)
+{
+	glfwSetKeyCallback(window, GlfwKeyCallback);
+	glfwSetCharCallback(window, GlfwCharCallback);
+	glfwSetMouseButtonCallback(window, GlfwMouseButtonCallback);
+	glfwSetCursorPosCallback(window, GlfwCursorPosCallback);
+	glfwSetScrollCallback(window, GlfwScrollCallback);
+	glfwSetWindowFocusCallback(window, GlfwWindowFocusCallback);
+	glfwSetWindowCloseCallback(window, GlfwWindowCloseCallback);
+	glfwSetWindowSizeCallback(window, GlfwWindowSizeCallback);
+}
+
+void winmain::GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	// Forward the event to ImGui unless a control binding is being captured.
+	const bool inputDown = action == GLFW_PRESS || action == GLFW_REPEAT;
+	if (!options::WaitingForInput() || !inputDown)
+		ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+
+	if (ImIO && ImIO->WantCaptureKeyboard && !options::WaitingForInput())
+		return;
+
+	if (action == GLFW_RELEASE)
 	{
-	case SDL_MOUSEMOTION:
-	case SDL_MOUSEBUTTONDOWN:
-	case SDL_MOUSEBUTTONUP:
-	case SDL_MOUSEWHEEL:
-		CursorIdleCounter = 1000;
-		mouseEvent = true;
+		pb::InputUp({InputTypes::Keyboard, key});
+		return;
+	}
+
+	if (action == GLFW_REPEAT)
+		return;
+
+	pb::InputDown({InputTypes::Keyboard, key});
+	if (!pb::cheat_mode)
+		return;
+
+	switch (key)
+	{
+	case GLFW_KEY_G:
+		DispGRhistory ^= true;
+		break;
+	case GLFW_KEY_O:
+		{
+			auto plt = new ColorRgba[4 * 256];
+			auto pltPtr = &plt[10]; // first 10 entries are system colors hardcoded in display_palette()
+			for (int i1 = 0, i2 = 0; i1 < 256 - 10; ++i1, i2 += 8)
+			{
+				unsigned char blue = i2, redGreen = i2;
+				if (i2 > 255)
+				{
+					blue = 255;
+					redGreen = i1;
+				}
+
+				*pltPtr++ = ColorRgba{blue, redGreen, redGreen, 0};
+			}
+			gdrv::display_palette(plt);
+			delete[] plt;
+		}
+		break;
+	case GLFW_KEY_Y:
+		glfwSetWindowTitle(MainWindow, "Pinball");
+		DispFrameRate ^= true;
+		break;
+	case GLFW_KEY_F1:
+		pb::frame(10);
+		break;
+	case GLFW_KEY_F10:
+		single_step ^= true;
+		if (!single_step)
+			no_time_loss = true;
 		break;
 	default:
-		mouseEvent = false;
 		break;
 	}
+}
 
-	if (ImIO->WantCaptureMouse && !options::WaitingForInput())
+void winmain::GlfwCharCallback(GLFWwindow* window, unsigned int codepoint)
+{
+	ImGui_ImplGlfw_CharCallback(window, codepoint);
+}
+
+void winmain::GlfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+	const bool inputDown = action == GLFW_PRESS;
+	if (!options::WaitingForInput() || !inputDown)
+		ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+
+	CursorIdleCounter = 1000;
+
+	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput())
 	{
 		if (mouse_down)
 		{
 			mouse_down = 0;
-			SDL_SetWindowGrab(MainWindow, SDL_FALSE);
+			glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		}
-		if (mouseEvent)
-			return 1;
+		if (inputDown)
+			return;
 	}
-	if (ImIO->WantCaptureKeyboard && !options::WaitingForInput())
+
+	if (action == GLFW_PRESS)
 	{
-		switch (event->type)
+		bool noInput = false;
+		if (button == GLFW_MOUSE_BUTTON_LEFT && pb::cheat_mode)
 		{
-		case SDL_KEYDOWN:
-		case SDL_KEYUP:
-		case SDL_CONTROLLERBUTTONDOWN:
-		case SDL_CONTROLLERBUTTONUP:
-			return 1;
-		default: ;
+			double x, y;
+			glfwGetCursorPos(window, &x, &y);
+			mouse_down = 1;
+			last_mouse_x = static_cast<int>(x);
+			last_mouse_y = static_cast<int>(y);
+			glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			noInput = true;
 		}
-	}
 
-	switch (event->type)
+		if (!noInput)
+			pb::InputDown({InputTypes::Mouse, button});
+	}
+	else if (action == GLFW_RELEASE)
 	{
-	case SDL_QUIT:
-		end_pause();
-		bQuit = true;
-		fullscrn::shutdown();
-		return_value = 0;
-		return 0;
-	case SDL_KEYUP:
-		pb::InputUp({InputTypes::Keyboard, event->key.keysym.sym});
-		break;
-	case SDL_KEYDOWN:
-		if (event->key.repeat)
-			break;
+		bool noInput = false;
+		if (button == GLFW_MOUSE_BUTTON_LEFT && mouse_down)
+		{
+			mouse_down = 0;
+			glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			noInput = true;
+		}
 
-		pb::InputDown({InputTypes::Keyboard, event->key.keysym.sym});
-		if (!pb::cheat_mode)
-			break;
-
-		switch (event->key.keysym.sym)
-		{
-		case SDLK_g:
-			DispGRhistory ^= true;
-			break;
-		case SDLK_o:
-			{
-				auto plt = new ColorRgba[4 * 256];
-				auto pltPtr = &plt[10]; // first 10 entries are system colors hardcoded in display_palette()
-				for (int i1 = 0, i2 = 0; i1 < 256 - 10; ++i1, i2 += 8)
-				{
-					unsigned char blue = i2, redGreen = i2;
-					if (i2 > 255)
-					{
-						blue = 255;
-						redGreen = i1;
-					}
-
-					*pltPtr++ = ColorRgba{blue, redGreen, redGreen, 0};
-				}
-				gdrv::display_palette(plt);
-				delete[] plt;
-			}
-			break;
-		case SDLK_y:
-			SDL_SetWindowTitle(MainWindow, "Pinball");
-			DispFrameRate ^= true;
-			break;
-		case SDLK_F1:
-			pb::frame(10);
-			break;
-		case SDLK_F10:
-			single_step ^= true;
-			if (!single_step)
-				no_time_loss = true;
-			break;
-		default:
-			break;
-		}
-		break;
-	case SDL_MOUSEBUTTONDOWN:
-		{
-			bool noInput = false;
-			switch (event->button.button)
-			{
-			case SDL_BUTTON_LEFT:
-				if (pb::cheat_mode)
-				{
-					mouse_down = 1;
-					last_mouse_x = event->button.x;
-					last_mouse_y = event->button.y;
-					SDL_SetWindowGrab(MainWindow, SDL_TRUE);
-					noInput = true;
-				}
-				break;
-			default:
-				break;
-			}
-
-			if (!noInput)
-				pb::InputDown({InputTypes::Mouse, event->button.button});
-		}
-		break;
-	case SDL_MOUSEBUTTONUP:
-		{
-			bool noInput = false;
-			switch (event->button.button)
-			{
-			case SDL_BUTTON_LEFT:
-				if (mouse_down)
-				{
-					mouse_down = 0;
-					SDL_SetWindowGrab(MainWindow, SDL_FALSE);
-					noInput = true;
-				}
-				break;
-			default:
-				break;
-			}
-
-			if (!noInput)
-				pb::InputUp({InputTypes::Mouse, event->button.button});
-		}
-		break;
-	case SDL_WINDOWEVENT:
-		switch (event->window.event)
-		{
-		case SDL_WINDOWEVENT_FOCUS_GAINED:
-		case SDL_WINDOWEVENT_TAKE_FOCUS:
-		case SDL_WINDOWEVENT_SHOWN:
-			activated = true;
-			Sound::Activate();
-			if (Options.Music && !single_step)
-				midi::music_play();
-			no_time_loss = true;
-			has_focus = true;
-			break;
-		case SDL_WINDOWEVENT_FOCUS_LOST:
-		case SDL_WINDOWEVENT_HIDDEN:
-			activated = false;
-			fullscrn::activate(0);
-			Options.FullScreen = false;
-			Sound::Deactivate();
-			midi::music_stop();
-			has_focus = false;
-			pb::loose_focus();
-			break;
-		case SDL_WINDOWEVENT_SIZE_CHANGED:
-		case SDL_WINDOWEVENT_RESIZED:
-			fullscrn::window_size_changed();
-			break;
-		default: ;
-		}
-		break;
-	case SDL_JOYDEVICEADDED:
-		if (SDL_IsGameController(event->jdevice.which))
-		{
-			SDL_GameControllerOpen(event->jdevice.which);
-		}
-		break;
-	case SDL_JOYDEVICEREMOVED:
-		{
-			SDL_GameController* controller = SDL_GameControllerFromInstanceID(event->jdevice.which);
-			if (controller)
-			{
-				SDL_GameControllerClose(controller);
-			}
-		}
-		break;
-	case SDL_CONTROLLERBUTTONDOWN:
-		pb::InputDown({InputTypes::GameController, event->cbutton.button});
-		break;
-	case SDL_CONTROLLERBUTTONUP:
-		pb::InputUp({InputTypes::GameController, event->cbutton.button});
-		break;
-	default: ;
+		if (!noInput)
+			pb::InputUp({InputTypes::Mouse, button});
 	}
+}
 
-	return 1;
+void winmain::GlfwCursorPosCallback(GLFWwindow* window, double x, double y)
+{
+	ImGui_ImplGlfw_CursorPosCallback(window, x, y);
+	CursorIdleCounter = 1000;
+
+	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput() && mouse_down)
+	{
+		mouse_down = 0;
+		glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+}
+
+void winmain::GlfwScrollCallback(GLFWwindow* window, double x, double y)
+{
+	ImGui_ImplGlfw_ScrollCallback(window, x, y);
+	CursorIdleCounter = 1000;
+
+	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput() && mouse_down)
+	{
+		mouse_down = 0;
+		glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+}
+
+void winmain::GlfwWindowFocusCallback(GLFWwindow* window, int focused)
+{
+	ImGui_ImplGlfw_WindowFocusCallback(window, focused);
+
+	if (focused)
+	{
+		activated = true;
+		Sound::Activate();
+		if (Options.Music && !single_step)
+			midi::music_play();
+		no_time_loss = true;
+		has_focus = true;
+	}
+	else
+	{
+		activated = false;
+		fullscrn::activate(0);
+		Options.FullScreen = false;
+		Sound::Deactivate();
+		midi::music_stop();
+		has_focus = false;
+		pb::loose_focus();
+	}
+}
+
+void winmain::GlfwWindowCloseCallback(GLFWwindow* /*window*/)
+{
+	end_pause();
+	bQuit = true;
+	fullscrn::shutdown();
+	return_value = 0;
+}
+
+void winmain::GlfwWindowSizeCallback(GLFWwindow* /*window*/, int /*width*/, int /*height*/)
+{
+	fullscrn::window_size_changed();
+}
+
+void winmain::PollGamepads()
+{
+	for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; jid++)
+	{
+		GLFWgamepadstate state;
+		if (!glfwJoystickPresent(jid) || !glfwGetGamepadState(jid, &state))
+			continue;
+
+		for (int b = 0; b <= GLFW_GAMEPAD_BUTTON_LAST; b++)
+		{
+			const bool pressed = state.buttons[b] == GLFW_PRESS;
+			auto& prev = GamepadPrev[jid][b];
+			if (pressed == prev)
+				continue;
+			prev = pressed;
+			CursorIdleCounter = 1000;
+			if (pressed)
+				pb::InputDown({InputTypes::GameController, b});
+			else
+				pb::InputUp({InputTypes::GameController, b});
+		}
+	}
 }
 
 int winmain::ProcessWindowMessages()
 {
-	static auto idleWait = 0;
-	SDL_Event event;
-	if (has_focus)
-	{
-		idleWait = static_cast<int>(TargetFrameTime.count());
-		while (SDL_PollEvent(&event))
-		{
-			if (!event_handler(&event))
-				return 0;
-		}
-
-		return 1;
-	}
-
-	// Progressively wait longer when transitioning to idle
-	idleWait = std::min(idleWait + static_cast<int>(TargetFrameTime.count()), 500);
-	if (SDL_WaitEventTimeout(&event, idleWait))
-	{
-		idleWait = static_cast<int>(TargetFrameTime.count());
-		return event_handler(&event);
-	}
+	glfwPollEvents();
+	PollGamepads();
 	return 1;
 }
 
@@ -1080,7 +1067,7 @@ void winmain::memalloc_failure()
 	Sound::Close();
 	const char* caption = pb::get_rc_string(Msg::STRING270);
 	const char* text = pb::get_rc_string(Msg::STRING279);
-	pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, caption, text);
+	pb::ShowMessageBox(MessageBoxIcon::Error, caption, text);
 	std::exit(1);
 }
 
@@ -1104,14 +1091,11 @@ void winmain::a_dialog()
 				ImGui::TextUnformatted("Original game by Cinematronics, Microsoft");
 				ImGui::Separator();
 
-				ImGui::TextUnformatted("Decompiled -> Ported to SDL");
+				ImGui::TextUnformatted("Decompiled -> Ported to GLFW + Vulkan");
 				ImGui::Text("Version %s", Version);
 				if (ImGui::SmallButton("Project home: https://github.com/k4zmu2a/SpaceCadetPinball"))
 				{
-#if SDL_VERSION_ATLEAST(2, 0, 14)
-					// Relatively new feature, skip with older SDL
-					SDL_OpenURL("https://github.com/k4zmu2a/SpaceCadetPinball");
-#endif
+					OpenURL("https://github.com/k4zmu2a/SpaceCadetPinball");
 				}
 				ImGui::EndTabItem();
 			}
@@ -1290,8 +1274,10 @@ void winmain::pause(bool toggle)
 void winmain::Restart()
 {
 	restart = true;
-	SDL_Event event{SDL_QUIT};
-	SDL_PushEvent(&event);
+	end_pause();
+	bQuit = true;
+	fullscrn::shutdown();
+	return_value = 0;
 }
 
 void winmain::UpdateFrameRate()
@@ -1331,8 +1317,7 @@ void winmain::HandleGameBinding(GameBindings binding, bool shortcut)
 	case GameBindings::Exit:
 		if (!shortcut)
 		{
-			SDL_Event event{SDL_QUIT};
-			SDL_PushEvent(&event);
+			glfwSetWindowShouldClose(MainWindow, GLFW_TRUE);
 		}
 		else
 			ShowExitPopup = true;

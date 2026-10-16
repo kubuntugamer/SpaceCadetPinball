@@ -55,19 +55,19 @@ Platforms covered by this project: desktop Windows, Linux and macOS.
 
 ## Compiling
 
-Project uses `C++11` and depends on `SDL2` libs.
+Project uses `C++11`. The window and input come from `GLFW`, rendering from `Vulkan`, audio from `miniaudio`, and MIDI music from `FluidSynth` (optional).
 
 ### On Windows
 
-Download and unpack devel packages for `SDL2` and `SDL2_mixer`.\
-Set paths to them in `CMakeLists.txt`, see suggested placement in `/Libs`.\
-Compile with Visual Studio; tested with 2019.
+Install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (provides `vulkan-1.dll` and the loader).\
+Dependencies (`glfw3`, and optionally `fluidsynth`) can be provided with [vcpkg](https://vcpkg.io); set `VCPKG_ROOT` and configure with `-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake`.\
+Compile with Visual Studio; tested with 2019. `BuildForWindows.ps1` automates the release build.
 
 ### On Linux
 
-Install devel packages for `SDL2` and `SDL2_mixer`.\
+Install devel packages for `GLFW`, `Vulkan` and (optionally) `FluidSynth`.\
 Compile with CMake; tested with GCC 10, Clang 11.\
-To cross-compile for Windows, install a 64-bit version of mingw and its `SDL2` and `SDL2_mixer` distributions, then use the `mingwcc.cmake` toolchain.
+To cross-compile for Windows, install a 64-bit mingw toolchain plus GLFW/Vulkan/FluidSynth, then use the `mingwcc.cmake` toolchain.
 
 [![Packaging status](https://repology.org/badge/tiny-repos/spacecadetpinball.svg)](https://repology.org/project/spacecadetpinball/versions) 
 
@@ -92,8 +92,8 @@ Be aware that the flag `--no-quarantime` will disable macOS's Gatekeeper during 
 
 **Manual compilation:**
 
-* **Homebrew**: Install the `SDL2`, `SDL2_mixer` homebrew packages.
-* **MacPorts**: Install the `libSDL2`, `libSDL2_mixer` macports packages.
+* **Homebrew**: Install the `glfw`, `vulkan-loader`, `molten-vk` and (optionally) `fluid-synth` homebrew packages.
+* **MacPorts**: Install the `glfw`, `moltenvk` and (optionally) `fluid-synth` macports packages.
 
 Compile with CMake. Ensure that `CMAKE_OSX_ARCHITECTURES` variable is set for either `x86_64` Apple Intel or `arm64` for Apple Silicon.
 
@@ -105,12 +105,19 @@ Run the `build-mac-app.sh` script from the root of the repository. The app will 
 
 Tested with: macOS Ventura (Apple Silicon) with Xcode Command Line Tools 14 & macOS Big Sur on GitHub Runner (Intel) with XCode 13.
 
+### Background music (optional)
+
+MIDI music is rendered by `FluidSynth` and needs a General MIDI SoundFont at runtime.\
+The game looks for a SoundFont in the usual system locations; set `SCP_SOUNDFONT=/path/to/soundfont.sf2` to override it.\
+If FluidSynth or a SoundFont is missing, the game runs normally without music.
+
 ## Plans
 
 * ~~Decompile original game~~
 * ~~Resizable window, scaled graphics~~
 * ~~Loader for high-res sprites from CADET.DAT~~
 * ~~Cross-platform port using SDL2, SDL2_mixer, ImGui~~
+* ~~Replace SDL2 with GLFW + Vulkan and SDL2_mixer with miniaudio~~
 * Full Tilt Cadet features
 * Localization support
 * Maybe: Support for the other two tables - Dragon and Pirate

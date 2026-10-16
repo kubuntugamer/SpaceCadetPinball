@@ -28,10 +28,11 @@ public:
 	static void SetResolution(int value);
 	static int GetMaxResolution();
 	static void window_size_changed();
-	static SDL_Rect GetScreenRectFromPinballRect(SDL_Rect rect);
+	static PBRect GetScreenRectFromPinballRect(PBRect rect);
 	static float GetScreenToPinballRatio();
 private :
 	static int resolution;
+	static int savedWindowX, savedWindowY, savedWindowW, savedWindowH;
 
 	static int enableFullscreen();
 	static int disableFullscreen();

@@ -24,100 +24,100 @@ optionsStruct options::Options
 		{
 			"Left Flipper key",
 			Msg::KEYMAPPER_FlipperL,
-			{InputTypes::Keyboard, SDLK_z},
-			{InputTypes::Mouse, SDL_BUTTON_LEFT},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER}
+			{InputTypes::Keyboard, GLFW_KEY_Z},
+			{InputTypes::Mouse, GLFW_MOUSE_BUTTON_LEFT},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_LEFT_BUMPER}
 		},
 		{
 			"Right Flipper key",
 			Msg::KEYMAPPER_FlipperR,
-			{InputTypes::Keyboard, SDLK_SLASH},
-			{InputTypes::Mouse,SDL_BUTTON_RIGHT},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER}
+			{InputTypes::Keyboard, GLFW_KEY_SLASH},
+			{InputTypes::Mouse,GLFW_MOUSE_BUTTON_RIGHT},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER}
 		},
 		{
 			"Plunger key",
 			Msg::KEYMAPPER_Plunger,
-			{InputTypes::Keyboard, SDLK_SPACE},
-			{InputTypes::Mouse,SDL_BUTTON_MIDDLE},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_A}
+			{InputTypes::Keyboard, GLFW_KEY_SPACE},
+			{InputTypes::Mouse,GLFW_MOUSE_BUTTON_MIDDLE},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_A}
 		},
 		{
 			"Left Table Bump key",
 			Msg::KEYMAPPER_BumpLeft,
-			{InputTypes::Keyboard, SDLK_x},
-			{InputTypes::Mouse,SDL_BUTTON_X1},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_DPAD_LEFT}
+			{InputTypes::Keyboard, GLFW_KEY_X},
+			{InputTypes::Mouse,GLFW_MOUSE_BUTTON_4},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_DPAD_LEFT}
 		},
 		{
 			"Right Table Bump key",
 			Msg::KEYMAPPER_BumpRight,
-			{InputTypes::Keyboard, SDLK_PERIOD},
-			{InputTypes::Mouse,SDL_BUTTON_X2},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_DPAD_RIGHT}
+			{InputTypes::Keyboard, GLFW_KEY_PERIOD},
+			{InputTypes::Mouse,GLFW_MOUSE_BUTTON_5},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_DPAD_RIGHT}
 		},
 		{
 			"Bottom Table Bump key",
 			Msg::KEYMAPPER_BumpBottom,
-			{InputTypes::Keyboard, SDLK_UP},
-			{InputTypes::Mouse,SDL_BUTTON_X2 + 1},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_DPAD_UP}
+			{InputTypes::Keyboard, GLFW_KEY_UP},
+			{InputTypes::Mouse,GLFW_MOUSE_BUTTON_6},
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_DPAD_UP}
 		},
 		{
 			"New Game",
 			Msg::Menu1_New_Game,
-			{InputTypes::Keyboard, SDLK_F2},
+			{InputTypes::Keyboard, GLFW_KEY_F2},
 			{},
 			{}
 		},
 		{
 			"Toggle Pause",
 			Msg::Menu1_Pause_Resume_Game,
-			{InputTypes::Keyboard, SDLK_F3},
+			{InputTypes::Keyboard, GLFW_KEY_F3},
 			{},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_START}
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_START}
 		},
 		{
 			"Toggle FullScreen",
 			Msg::Menu1_Full_Screen,
-			{InputTypes::Keyboard, SDLK_F4},
+			{InputTypes::Keyboard, GLFW_KEY_F4},
 			{},
 			{}
 		},
 		{
 			"Toggle Sounds",
 			Msg::Menu1_Sounds,
-			{InputTypes::Keyboard, SDLK_F5},
+			{InputTypes::Keyboard, GLFW_KEY_F5},
 			{},
 			{}
 		},
 		{
 			"Toggle Music",
 			Msg::Menu1_Music,
-			{InputTypes::Keyboard, SDLK_F6},
+			{InputTypes::Keyboard, GLFW_KEY_F6},
 			{},
 			{}
 		},
 		{
 			"Show Control Dialog",
 			Msg::Menu1_Player_Controls,
-			{InputTypes::Keyboard, SDLK_F8},
+			{InputTypes::Keyboard, GLFW_KEY_F8},
 			{},
 			{}
 		},
 		{
 			"Toggle Menu Display",
 			Msg::Menu1_ToggleShowMenu,
-			{InputTypes::Keyboard, SDLK_F9},
+			{InputTypes::Keyboard, GLFW_KEY_F9},
 			{},
 			{}
 		},
 		{
 			"Exit",
 			Msg::Menu1_Exit,
-			{InputTypes::Keyboard, SDLK_ESCAPE},
+			{InputTypes::Keyboard, GLFW_KEY_ESCAPE},
 			{},
-			{InputTypes::GameController, SDL_CONTROLLER_BUTTON_BACK}
+			{InputTypes::GameController, GLFW_GAMEPAD_BUTTON_BACK}
 		},
 	},
 	{"Sounds", true},
@@ -527,57 +527,113 @@ std::string GameInput::GetFullInputDescription() const
 	return prefix + GetShortInputDescription();
 }
 
+static std::string GlfwKeyName(int key)
+{
+	switch (key)
+	{
+	case GLFW_KEY_SPACE: return "Space";
+	case GLFW_KEY_APOSTROPHE: return "'";
+	case GLFW_KEY_COMMA: return ",";
+	case GLFW_KEY_MINUS: return "-";
+	case GLFW_KEY_PERIOD: return ".";
+	case GLFW_KEY_SLASH: return "/";
+	case GLFW_KEY_SEMICOLON: return ";";
+	case GLFW_KEY_EQUAL: return "=";
+	case GLFW_KEY_LEFT_BRACKET: return "[";
+	case GLFW_KEY_BACKSLASH: return "\\";
+	case GLFW_KEY_RIGHT_BRACKET: return "]";
+	case GLFW_KEY_GRAVE_ACCENT: return "`";
+	case GLFW_KEY_ESCAPE: return "Escape";
+	case GLFW_KEY_ENTER: return "Enter";
+	case GLFW_KEY_TAB: return "Tab";
+	case GLFW_KEY_BACKSPACE: return "Backspace";
+	case GLFW_KEY_INSERT: return "Insert";
+	case GLFW_KEY_DELETE: return "Delete";
+	case GLFW_KEY_RIGHT: return "Right";
+	case GLFW_KEY_LEFT: return "Left";
+	case GLFW_KEY_DOWN: return "Down";
+	case GLFW_KEY_UP: return "Up";
+	case GLFW_KEY_PAGE_UP: return "PageUp";
+	case GLFW_KEY_PAGE_DOWN: return "PageDown";
+	case GLFW_KEY_HOME: return "Home";
+	case GLFW_KEY_END: return "End";
+	case GLFW_KEY_CAPS_LOCK: return "CapsLock";
+	case GLFW_KEY_SCROLL_LOCK: return "ScrollLock";
+	case GLFW_KEY_NUM_LOCK: return "NumLock";
+	case GLFW_KEY_PRINT_SCREEN: return "PrintScreen";
+	case GLFW_KEY_PAUSE: return "Pause";
+	case GLFW_KEY_LEFT_SHIFT: return "LShift";
+	case GLFW_KEY_LEFT_CONTROL: return "LCtrl";
+	case GLFW_KEY_LEFT_ALT: return "LAlt";
+	case GLFW_KEY_LEFT_SUPER: return "LSuper";
+	case GLFW_KEY_RIGHT_SHIFT: return "RShift";
+	case GLFW_KEY_RIGHT_CONTROL: return "RCtrl";
+	case GLFW_KEY_RIGHT_ALT: return "RAlt";
+	case GLFW_KEY_RIGHT_SUPER: return "RSuper";
+	case GLFW_KEY_MENU: return "Menu";
+	default: break;
+	}
+
+	if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F25)
+		return "F" + std::to_string(key - GLFW_KEY_F1 + 1);
+
+	if (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_9)
+		return "Num" + std::to_string(key - GLFW_KEY_KP_0);
+
+	const char* name = glfwGetKeyName(key, 0);
+	if (name)
+	{
+		std::string result = name;
+		for (auto& c : result)
+			c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+		return result;
+	}
+	return "Key" + std::to_string(key);
+}
+
 std::string GameInput::GetShortInputDescription() const
 {
-	static LPCSTR mouseButtons[]
+	static LPCSTR controllerButtons[GLFW_GAMEPAD_BUTTON_LAST + 1] =
 	{
-		nullptr,
-		"Left",
-		"Middle",
-		"Right",
-		"X1",
-		"X2",
-	};
-
-	static LPCSTR controllerButtons[] =
-	{
-		"A",
-		"B",
-		"X",
-		"Y",
-		"Back",
-		"Guide",
-		"Start",
-		"LeftStick",
-		"RightStick",
-		"LeftShoulder",
-		"RightShoulder",
-		"DpUp",
-		"DpDown",
-		"DpLeft",
-		"DpRight",
-		"Misc1",
-		"Paddle1",
-		"Paddle2",
-		"Paddle3",
-		"Paddle4",
-		"Touchpad",
+		"A",             // 0  GLFW_GAMEPAD_BUTTON_A
+		"B",             // 1  GLFW_GAMEPAD_BUTTON_B
+		"X",             // 2  GLFW_GAMEPAD_BUTTON_X
+		"Y",             // 3  GLFW_GAMEPAD_BUTTON_Y
+		"LeftShoulder",  // 4  GLFW_GAMEPAD_BUTTON_LEFT_BUMPER
+		"RightShoulder", // 5  GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER
+		"Back",          // 6  GLFW_GAMEPAD_BUTTON_BACK
+		"Start",         // 7  GLFW_GAMEPAD_BUTTON_START
+		"Guide",         // 8  GLFW_GAMEPAD_BUTTON_GUIDE
+		"LeftStick",     // 9  GLFW_GAMEPAD_BUTTON_LEFT_THUMB
+		"RightStick",    // 10 GLFW_GAMEPAD_BUTTON_RIGHT_THUMB
+		"DpUp",          // 11 GLFW_GAMEPAD_BUTTON_DPAD_UP
+		"DpRight",       // 12 GLFW_GAMEPAD_BUTTON_DPAD_RIGHT
+		"DpDown",        // 13 GLFW_GAMEPAD_BUTTON_DPAD_DOWN
+		"DpLeft",        // 14 GLFW_GAMEPAD_BUTTON_DPAD_LEFT
 	};
 
 	std::string keyName;
 	switch (Type)
 	{
 	case InputTypes::Keyboard:
-		keyName = SDL_GetKeyName(Value);
+		keyName = GlfwKeyName(Value);
 		break;
 	case InputTypes::Mouse:
-		if (Value >= SDL_BUTTON_LEFT && Value <= SDL_BUTTON_X2)
-			keyName = mouseButtons[Value];
-		else
-			keyName = "MButton" + std::to_string(Value);
+		switch (Value)
+		{
+		case GLFW_MOUSE_BUTTON_LEFT: keyName = "Left"; break;
+		case GLFW_MOUSE_BUTTON_RIGHT: keyName = "Right"; break;
+		case GLFW_MOUSE_BUTTON_MIDDLE: keyName = "Middle"; break;
+		case GLFW_MOUSE_BUTTON_4: keyName = "M4"; break;
+		case GLFW_MOUSE_BUTTON_5: keyName = "M5"; break;
+		case GLFW_MOUSE_BUTTON_6: keyName = "M6"; break;
+		case GLFW_MOUSE_BUTTON_7: keyName = "M7"; break;
+		case GLFW_MOUSE_BUTTON_8: keyName = "M8"; break;
+		default: keyName = "MButton" + std::to_string(Value); break;
+		}
 		break;
 	case InputTypes::GameController:
-		if (Value >= SDL_CONTROLLER_BUTTON_A && Value < std::min(static_cast<int>(SDL_CONTROLLER_BUTTON_MAX), 21))
+		if (Value >= 0 && Value <= GLFW_GAMEPAD_BUTTON_LAST)
 			keyName = controllerButtons[Value];
 		else
 			keyName = "CButton" + std::to_string(Value);

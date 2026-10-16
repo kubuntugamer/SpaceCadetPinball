@@ -8,12 +8,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMakeModules")
 
-# On Windows, set paths to SDL-devel packages here
-if(WIN32)
-   list(APPEND SDL2_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs/SDL2")
-   list(APPEND SDL2_MIXER_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs/SDL2_mixer")
-endif()
-
 # Link mingw libs static
 if(MINGW)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static")
@@ -25,17 +19,19 @@ if(APPLE)
     set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.11")
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
-    list(APPEND SDL2_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs")
-    list(APPEND SDL2_MIXER_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs")
 endif()
 
-# SDL2main is not needed
-set(SDL2_BUILDING_LIBRARY ON)
+# Windowing + input
+find_package(glfw3 REQUIRED)
 
-find_package(SDL2 REQUIRED)
-FIND_PACKAGE(SDL2_mixer REQUIRED)
+# Vulkan rendering
+find_package(Vulkan REQUIRED)
 
-include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR})
+# MIDI music (optional): wavetable synthesis through FluidSynth + a SoundFont.
+find_path(FLUIDSYNTH_INCLUDE_DIR fluidsynth.h)
+find_library(FLUIDSYNTH_LIBRARY NAMES fluidsynth libfluidsynth-3 libfluidsynth)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball)
 get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
 foreach(dir ${dirs})
   message(STATUS "Include dir='${dir}'")
@@ -167,23 +163,27 @@ set(SOURCE_FILES
         SpaceCadetPinball/winmain.h
         SpaceCadetPinball/zdrv.cpp
         SpaceCadetPinball/zdrv.h
+        SpaceCadetPinball/vkrender.cpp
+        SpaceCadetPinball/vkrender.h
+        SpaceCadetPinball/table_shader_spv.h
         SpaceCadetPinball/imconfig.h
         SpaceCadetPinball/imgui_internal.h
         SpaceCadetPinball/imgui.cpp
         SpaceCadetPinball/imgui.h
-        SpaceCadetPinball/imgui_sdl.cpp
-        SpaceCadetPinball/imgui_sdl.h
         SpaceCadetPinball/imgui_draw.cpp
         SpaceCadetPinball/imgui_widgets.cpp
         SpaceCadetPinball/imgui_tables.cpp
         SpaceCadetPinball/imgui_demo.cpp
-        SpaceCadetPinball/imgui_impl_sdl.cpp
-        SpaceCadetPinball/imgui_impl_sdl.h
-        SpaceCadetPinball/imgui_impl_sdlrenderer.h
-        SpaceCadetPinball/imgui_impl_sdlrenderer.cpp
+        SpaceCadetPinball/imgui_impl_glfw.cpp
+        SpaceCadetPinball/imgui_impl_glfw.h
+        SpaceCadetPinball/imgui_impl_vulkan.cpp
+        SpaceCadetPinball/imgui_impl_vulkan.h
         SpaceCadetPinball/imstb_textedit.h
         SpaceCadetPinball/imstb_rectpack.h
         SpaceCadetPinball/imstb_truetype.h
+        SpaceCadetPinball/miniaudio.h
+        SpaceCadetPinball/miniaudio_config.h
+        SpaceCadetPinball/miniaudio_impl.cpp
         SpaceCadetPinball/DebugOverlay.cpp
         SpaceCadetPinball/DebugOverlay.h
         )
@@ -199,13 +199,13 @@ add_executable(SpaceCadetPinball ${SOURCE_FILES})
 # Skip pch on foreign code
 set_source_files_properties(
         SpaceCadetPinball/imgui.cpp
-        SpaceCadetPinball/imgui_sdl.cpp
         SpaceCadetPinball/imgui_draw.cpp
         SpaceCadetPinball/imgui_widgets.cpp
         SpaceCadetPinball/imgui_tables.cpp
         SpaceCadetPinball/imgui_demo.cpp
-        SpaceCadetPinball/imgui_impl_sdl.cpp
-        SpaceCadetPinball/imgui_impl_sdlrenderer.cpp
+        SpaceCadetPinball/imgui_impl_glfw.cpp
+        SpaceCadetPinball/imgui_impl_vulkan.cpp
+        SpaceCadetPinball/miniaudio_impl.cpp
         PROPERTIES SKIP_PRECOMPILE_HEADERS 1
 )
 
@@ -216,28 +216,29 @@ if(${CMAKE_VERSION} VERSION_GREATER "3.16.0" OR ${CMAKE_VERSION} VERSION_EQUAL "
             )
 endif()
 
-target_link_libraries(SpaceCadetPinball ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY})
+target_link_libraries(SpaceCadetPinball glfw Vulkan::Vulkan)
 
-# On Windows, copy DLL to output
-if(WIN32)
-    list(GET SDL2_LIBRARY -1 SDL2_DLL_PATH)
-    list(GET SDL2_MIXER_LIBRARY -1 SDL2_MIXER_DLL_PATH)
-    get_filename_component(SDL2_DLL_PATH ${SDL2_DLL_PATH} DIRECTORY)
-    get_filename_component(SDL2_MIXER_DLL_PATH ${SDL2_MIXER_DLL_PATH} DIRECTORY)
-    if(MINGW)
-        string(REGEX REPLACE "lib$" "bin" SDL2_DLL_PATH ${SDL2_DLL_PATH})
-        string(REGEX REPLACE "lib$" "bin" SDL2_MIXER_DLL_PATH ${SDL2_MIXER_DLL_PATH})
-    endif()
-    message(STATUS "copy paths='${SDL2_DLL_PATH}' '${SDL2_MIXER_DLL_PATH}'") 
-    add_custom_command(TARGET SpaceCadetPinball POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL_PATH}/SDL2.dll" $<TARGET_FILE_DIR:SpaceCadetPinball>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_MIXER_DLL_PATH}/SDL2_mixer.dll" $<TARGET_FILE_DIR:SpaceCadetPinball>
-        )
+# Enable MIDI music when FluidSynth is available, otherwise the stub is used.
+if(FLUIDSYNTH_INCLUDE_DIR AND FLUIDSYNTH_LIBRARY)
+    target_include_directories(SpaceCadetPinball PRIVATE ${FLUIDSYNTH_INCLUDE_DIR})
+    target_compile_definitions(SpaceCadetPinball PRIVATE HAS_FLUIDSYNTH)
+    target_link_libraries(SpaceCadetPinball ${FLUIDSYNTH_LIBRARY})
+    message(STATUS "FluidSynth found: ${FLUIDSYNTH_LIBRARY} - MIDI music enabled")
+else()
+    message(STATUS "FluidSynth not found - MIDI music disabled")
 endif()
 
+# miniaudio runtime-loads its backends and needs threads/dl/math on Unix.
+if(UNIX)
+    target_link_libraries(SpaceCadetPinball dl pthread m)
+endif()
+
+include(GNUInstallDirs)
+install(TARGETS "${PROJECT_NAME}"
+	RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+	BUNDLE DESTINATION .)
+
 if(UNIX AND NOT APPLE)
-	include(GNUInstallDirs)
-	install(TARGETS "${PROJECT_NAME}" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 	install(FILES "${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.desktop" DESTINATION "share/applications")
 	install(FILES "${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.metainfo.xml" DESTINATION "share/metainfo")
 	foreach(S 16 32 48 128 192)
@@ -245,3 +246,10 @@ if(UNIX AND NOT APPLE)
 			"share/icons/hicolor/${S}x${S}/apps" RENAME "${PROJECT_NAME}.png")
 	endforeach(S)
 endif()
+
+# Packaging: the binary only, game data is provided by the user.
+set(CPACK_PACKAGE_NAME "SpaceCadetPinball")
+set(CPACK_PACKAGE_VENDOR "SpaceCadetPinball")
+set(CPACK_PACKAGE_VERSION "2.1.1")
+set(CPACK_GENERATOR "TGZ;ZIP")
+include(CPack)

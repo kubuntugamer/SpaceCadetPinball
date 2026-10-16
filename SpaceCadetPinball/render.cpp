@@ -10,6 +10,7 @@
 #include "winmain.h"
 #include "DebugOverlay.h"
 #include "proj.h"
+#include "vkrender.h"
 
 std::vector<render_sprite*> render::sprite_list, render::ball_list;
 zmap_header_type* render::background_zmap;
@@ -17,7 +18,7 @@ int render::zmap_offsetX, render::zmap_offsetY, render::offset_x, render::offset
 rectangle_type render::vscreen_rect;
 gdrv_bitmap8 *render::vscreen, *render::background_bitmap, *render::ball_bitmap[20];
 zmap_header_type* render::zscreen;
-SDL_Rect render::DestinationRect{};
+PBRect render::DestinationRect{};
 
 render_sprite::render_sprite(VisualTypes visualType, gdrv_bitmap8* bmp, zmap_header_type* zMap,
 	int xPosition, int yPosition, rectangle_type* boundingRect)
@@ -139,7 +140,8 @@ void render::uninit()
 
 void render::recreate_screen_texture()
 {
-	vscreen->CreateTexture(options::Options.LinearFiltering ? "linear" : "nearest", SDL_TEXTUREACCESS_STREAMING);
+	// The vScreen is uploaded to the GPU every frame by PresentVScreen();
+	// there is no persistent texture to recreate here.
 }
 
 void render::update()
@@ -454,69 +456,47 @@ void render::SpriteViewer(bool* show)
 
 void render::PresentVScreen()
 {
-	vscreen->BlitToTexture();
-
-	if (offset_x == 0 && offset_y == 0)
+	if (vkrender::is_initialized())
 	{
-		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, nullptr, &DestinationRect);
-	}
-	else
-	{
-		auto tableWidthCoef = static_cast<float>(pb::MainTable->Width) / vscreen->Width;
-		auto srcSeparationX = static_cast<int>(round(vscreen->Width * tableWidthCoef));
-		auto srcBoardRect = SDL_Rect
-		{
-			0, 0,
-			srcSeparationX, vscreen->Height
-		};
-		auto srcSidebarRect = SDL_Rect
-		{
-			srcSeparationX, 0,
-			vscreen->Width - srcSeparationX, vscreen->Height
-		};
+		vkrender::TableDraw draws[2];
+		int drawCount = 0;
+		const int texStride = vscreen->Stride * static_cast<int>(sizeof(ColorRgba));
 
-#if SDL_VERSION_ATLEAST(2, 0, 10)
-		// SDL_RenderCopyF was added in 2.0.10
-		auto dstSeparationX = DestinationRect.w * tableWidthCoef;
-		auto dstBoardRect = SDL_FRect
+		if (offset_x == 0 && offset_y == 0)
 		{
-			DestinationRect.x + offset_x * fullscrn::ScaleX,
-			DestinationRect.y + offset_y * fullscrn::ScaleY,
-			dstSeparationX, static_cast<float>(DestinationRect.h)
-		};
-		auto dstSidebarRect = SDL_FRect
+			draws[drawCount++] = vkrender::TableDraw{
+				static_cast<float>(DestinationRect.x), static_cast<float>(DestinationRect.y),
+				static_cast<float>(DestinationRect.w), static_cast<float>(DestinationRect.h),
+				0.0f, 0.0f, 1.0f, 1.0f
+			};
+		}
+		else
 		{
-			DestinationRect.x + dstSeparationX, static_cast<float>(DestinationRect.y),
-			DestinationRect.w - dstSeparationX, static_cast<float>(DestinationRect.h)
-		};
+			// The table is shifted horizontally/vertically: draw the board and the
+			// sidebar as two separate quads so the board can move relative to the UI.
+			auto tableWidthCoef = static_cast<float>(pb::MainTable->Width) / vscreen->Width;
+			auto srcSeparationX = static_cast<int>(round(vscreen->Width * tableWidthCoef));
+			auto uSplit = static_cast<float>(srcSeparationX) / vscreen->Width;
+			auto dstSeparationX = DestinationRect.w * tableWidthCoef;
 
-		SDL_RenderCopyF(winmain::Renderer, vscreen->Texture, &srcBoardRect, &dstBoardRect);
-		SDL_RenderCopyF(winmain::Renderer, vscreen->Texture, &srcSidebarRect, &dstSidebarRect);
-#else
-		// SDL_RenderCopy cannot express sub pixel offset.
-		// Vscreen shift is required for that.
-		auto dstSeparationX = static_cast<int>(DestinationRect.w * tableWidthCoef);
-		auto scaledOffX = static_cast<int>(round(offset_x * fullscrn::ScaleX));
-		if (offset_x != 0 && scaledOffX == 0)
-			scaledOffX = Sign(offset_x);
-		auto scaledOffY = static_cast<int>(round(offset_y * fullscrn::ScaleY));
-		if (offset_y != 0 && scaledOffX == 0)
-			scaledOffY = Sign(offset_y);
+			draws[drawCount++] = vkrender::TableDraw{
+				DestinationRect.x + offset_x * fullscrn::ScaleX,
+				DestinationRect.y + offset_y * fullscrn::ScaleY,
+				dstSeparationX,
+				static_cast<float>(DestinationRect.h),
+				0.0f, 0.0f, uSplit, 1.0f
+			};
+			draws[drawCount++] = vkrender::TableDraw{
+				DestinationRect.x + dstSeparationX,
+				static_cast<float>(DestinationRect.y),
+				DestinationRect.w - dstSeparationX,
+				static_cast<float>(DestinationRect.h),
+				uSplit, 0.0f, 1.0f, 1.0f
+			};
+		}
 
-		auto dstBoardRect = SDL_Rect
-		{
-			DestinationRect.x + scaledOffX, DestinationRect.y + scaledOffY,
-			dstSeparationX, DestinationRect.h
-		};
-		auto dstSidebarRect = SDL_Rect
-		{
-			DestinationRect.x + dstSeparationX, DestinationRect.y,
-			DestinationRect.w - dstSeparationX, DestinationRect.h
-		};
-
-		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &srcBoardRect, &dstBoardRect);
-		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &srcSidebarRect, &dstSidebarRect);
-#endif
+		vkrender::draw_table(vscreen->BmpBufPtr1, vscreen->Width, vscreen->Height, texStride,
+		                     draws, drawCount, options::Options.LinearFiltering);
 	}
 
 	if (options::Options.DebugOverlay)

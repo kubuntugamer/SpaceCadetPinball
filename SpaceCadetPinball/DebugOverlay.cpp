@@ -18,86 +18,47 @@
 #include "options.h"
 #include "Sound.h"
 
+// The debug overlay is drawn with ImGui's foreground draw list. All geometry is
+// authored in vScreen (table) coordinates by proj::xform_to_2d and is mapped to
+// screen coordinates through render::DestinationRect here.
+static ImDrawList* gOverlay = nullptr;
+static ImU32 gOverlayColor = 0;
 
-gdrv_bitmap8* DebugOverlay::dbScreen = nullptr;
-
-static int SDL_RenderDrawCircle(SDL_Renderer* renderer, int x, int y, int radius)
+static inline ImVec2 OverlayPoint(int x, int y)
 {
-	SDL_Point points[256];
-	int pointCount = 0;
-	int offsetx, offsety, d;
-	int status;
+	auto& dst = render::DestinationRect;
+	const float sx = static_cast<float>(dst.w) / static_cast<float>(render::vscreen->Width);
+	const float sy = static_cast<float>(dst.h) / static_cast<float>(render::vscreen->Height);
+	return ImVec2(dst.x + x * sx, dst.y + y * sy);
+}
 
-	offsetx = 0;
-	offsety = radius;
-	d = radius - 1;
-	status = 0;
+static inline float OverlayScaleX()
+{
+	return static_cast<float>(render::DestinationRect.w) / static_cast<float>(render::vscreen->Width);
+}
 
-	while (offsety >= offsetx)
-	{
-		if (pointCount + 8 > 256)
-		{
-			status = SDL_RenderDrawPoints(renderer, points, pointCount);
-			pointCount = 0;
+static inline void OverlayLine(int x1, int y1, int x2, int y2)
+{
+	gOverlay->AddLine(OverlayPoint(x1, y1), OverlayPoint(x2, y2), gOverlayColor, 1.0f);
+}
 
-			if (status < 0) {
-				status = -1;
-				break;
-			}
-		}
+static inline void OverlayRect(int x, int y, int w, int h)
+{
+	gOverlay->AddRect(OverlayPoint(x, y), OverlayPoint(x + w, y + h), gOverlayColor, 0.0f, 0, 1.0f);
+}
 
-		points[pointCount++] = { x + offsetx, y + offsety };
-		points[pointCount++] = { x + offsety, y + offsetx };
-		points[pointCount++] = { x - offsetx, y + offsety };
-		points[pointCount++] = { x - offsety, y + offsetx };
-		points[pointCount++] = { x + offsetx, y - offsety };
-		points[pointCount++] = { x + offsety, y - offsetx };
-		points[pointCount++] = { x - offsetx, y - offsety };
-		points[pointCount++] = { x - offsety, y - offsetx };
-
-		if (d >= 2 * offsetx) {
-			d -= 2 * offsetx + 1;
-			offsetx += 1;
-		}
-		else if (d < 2 * (radius - offsety)) {
-			d += 2 * offsety - 1;
-			offsety -= 1;
-		}
-		else {
-			d += 2 * (offsety - offsetx - 1);
-			offsety -= 1;
-			offsetx += 1;
-		}
-	}
-
-	if (pointCount > 0)
-		status = SDL_RenderDrawPoints(renderer, points, pointCount);
-
-	return status;
+static inline void OverlayCircle(int x, int y, int radius)
+{
+	gOverlay->AddCircle(OverlayPoint(x, y), radius * OverlayScaleX(), gOverlayColor, 0, 1.0f);
 }
 
 void DebugOverlay::UnInit()
 {
-	delete dbScreen;
-	dbScreen = nullptr;
 }
 
 void DebugOverlay::DrawOverlay()
 {
-	if (dbScreen == nullptr)
-	{
-		dbScreen = new gdrv_bitmap8(render::vscreen->Width, render::vscreen->Height, false, false);
-		dbScreen->CreateTexture("nearest", SDL_TEXTUREACCESS_TARGET);
-		SDL_SetTextureBlendMode(dbScreen->Texture, SDL_BLENDMODE_BLEND);
-	}
-
-	// Setup overlay rendering
-	Uint8 initialR, initialG, initialB, initialA;
-	auto initialRenderTarget = SDL_GetRenderTarget(winmain::Renderer);
-	SDL_GetRenderDrawColor(winmain::Renderer, &initialR, &initialG, &initialB, &initialA);
-	SDL_SetRenderTarget(winmain::Renderer, dbScreen->Texture);
-	SDL_SetRenderDrawColor(winmain::Renderer, 0, 0, 0, 0);
-	SDL_RenderClear(winmain::Renderer);
+	gOverlay = ImGui::GetForegroundDrawList();
 
 	// Draw EdgeManager box grid
 	if (options::Options.DebugOverlayGrid)
@@ -127,24 +88,14 @@ void DebugOverlay::DrawOverlay()
 	if (options::Options.DebugOverlayAabb)
 		DrawComponentAabb();
 
-	// Restore render target
-	SDL_SetRenderTarget(winmain::Renderer, initialRenderTarget);
-	SDL_SetRenderDrawColor(winmain::Renderer,
-		initialR, initialG, initialB, initialA);
-
-	// Copy overlay with alpha blending
-	SDL_BlendMode blendMode;
-	SDL_GetRenderDrawBlendMode(winmain::Renderer, &blendMode);
-	SDL_SetRenderDrawBlendMode(winmain::Renderer, SDL_BLENDMODE_BLEND);
-	SDL_RenderCopy(winmain::Renderer, dbScreen->Texture, nullptr, &render::DestinationRect);
-	SDL_SetRenderDrawBlendMode(winmain::Renderer, blendMode);
+	gOverlay = nullptr;
 }
 
 void DebugOverlay::DrawBoxGrid()
 {
 	auto& edgeMan = *TTableLayer::edge_manager;
 
-	SDL_SetRenderDrawColor(winmain::Renderer, 0, 255, 0, 255);
+	gOverlayColor = IM_COL32(0, 255, 0, 255);
 	for (int x = 0; x <= edgeMan.MaxBoxX; x++)
 	{
 		vector2 boxPt{ x * edgeMan.AdvanceX + edgeMan.MinX , edgeMan.MinY };
@@ -152,7 +103,7 @@ void DebugOverlay::DrawBoxGrid()
 		boxPt.Y = edgeMan.MaxBoxY * edgeMan.AdvanceY + edgeMan.MinY;
 		auto pt2 = proj::xform_to_2d(boxPt);
 
-		SDL_RenderDrawLine(winmain::Renderer, pt1.X, pt1.Y, pt2.X, pt2.Y);
+		OverlayLine(pt1.X, pt1.Y, pt2.X, pt2.Y);
 	}
 	for (int y = 0; y <= edgeMan.MaxBoxY; y++)
 	{
@@ -161,13 +112,13 @@ void DebugOverlay::DrawBoxGrid()
 		boxPt.X = edgeMan.MaxBoxX * edgeMan.AdvanceX + edgeMan.MinX;
 		auto pt2 = proj::xform_to_2d(boxPt);
 
-		SDL_RenderDrawLine(winmain::Renderer, pt1.X, pt1.Y, pt2.X, pt2.Y);
+		OverlayLine(pt1.X, pt1.Y, pt2.X, pt2.Y);
 	}
 }
 
 void DebugOverlay::DrawAllEdges()
 {
-	SDL_SetRenderDrawColor(winmain::Renderer, 0, 200, 200, 255);
+	gOverlayColor = IM_COL32(0, 200, 200, 255);
 	for (auto cmp : pb::MainTable->ComponentList)
 	{
 		auto collCmp = dynamic_cast<TCollisionComponent*>(cmp);
@@ -197,7 +148,7 @@ void DebugOverlay::DrawBallInfo()
 
 			if (options::Options.DebugOverlayBallEdges)
 			{
-				SDL_SetRenderDrawColor(winmain::Renderer, 255, 0, 0, 255);
+				gOverlayColor = IM_COL32(255, 0, 0, 255);
 				auto x = edgeMan.box_x(ballPosition.X), y = edgeMan.box_y(ballPosition.Y);
 				auto& box = edgeMan.BoxArray[x + y * edgeMan.MaxBoxX];
 				for (auto edge : box.EdgeList)
@@ -208,18 +159,18 @@ void DebugOverlay::DrawBallInfo()
 
 			if (options::Options.DebugOverlayBallPosition)
 			{
-				SDL_SetRenderDrawColor(winmain::Renderer, 0, 0, 255, 255);
+				gOverlayColor = IM_COL32(0, 0, 255, 255);
 
 				auto pt1 = proj::xform_to_2d(ballPosition);
 				vector2 radVec1 = { 0, ballPosition.Y }, radVec2 = { ball->Radius, ballPosition.Y };
 				auto radVec1I = proj::xform_to_2d(radVec1), radVec2I = proj::xform_to_2d(radVec2);
 				auto radI = std::sqrt(maths::magnitudeSq(vector2i{ radVec1I.X - radVec2I.X ,radVec1I.Y - radVec2I.Y }));
-				SDL_RenderDrawCircle(winmain::Renderer, pt1.X, pt1.Y, static_cast<int>(std::round(radI)));
+				OverlayCircle(pt1.X, pt1.Y, static_cast<int>(std::round(radI)));
 
 				auto nextPos = ballPosition;
 				maths::vector_add(nextPos, maths::vector_mul(ball->Direction, ball->Speed / 10.0f));
 				auto pt2 = proj::xform_to_2d(nextPos);
-				SDL_RenderDrawLine(winmain::Renderer, pt1.X, pt1.Y, pt2.X, pt2.Y);
+				OverlayLine(pt1.X, pt1.Y, pt2.X, pt2.Y);
 			}
 		}
 	}
@@ -227,7 +178,7 @@ void DebugOverlay::DrawBallInfo()
 
 void DebugOverlay::DrawAllSprites()
 {
-	SDL_SetRenderDrawColor(winmain::Renderer, 200, 200, 0, 255);
+	gOverlayColor = IM_COL32(200, 200, 0, 255);
 	for (auto cmp : pb::MainTable->ComponentList)
 	{
 		if (cmp->RenderSprite)
@@ -235,8 +186,7 @@ void DebugOverlay::DrawAllSprites()
 			auto& bmpR = cmp->RenderSprite->BmpRect;
 			if (bmpR.Width != 0 && bmpR.Height != 0)
 			{
-				SDL_Rect rect{ bmpR.XPosition, bmpR.YPosition, bmpR.Width, bmpR.Height };
-				SDL_RenderDrawRect(winmain::Renderer, &rect);
+				OverlayRect(bmpR.XPosition, bmpR.YPosition, bmpR.Width, bmpR.Height);
 			}
 		}
 	}
@@ -245,20 +195,20 @@ void DebugOverlay::DrawAllSprites()
 void DebugOverlay::DrawSoundPositions()
 {
 	auto& edgeMan = *TTableLayer::edge_manager;
-	SDL_SetRenderDrawColor(winmain::Renderer, 200, 0, 200, 255);
+	gOverlayColor = IM_COL32(200, 0, 200, 255);
 
 	for (auto& posNorm : Sound::Channels)
 	{
 		auto pos3D = edgeMan.DeNormalizeBox(posNorm.Position);
 		auto pos2D = proj::xform_to_2d(pos3D);
-		SDL_RenderDrawCircle(winmain::Renderer, pos2D.X, pos2D.Y, 7);
+		OverlayCircle(pos2D.X, pos2D.Y, 7);
 	}
 }
 
 void DebugOverlay::DrawBallDepthSteps()
 {
 	auto& edgeMan = *TTableLayer::edge_manager;
-	SDL_SetRenderDrawColor(winmain::Renderer, 200, 100, 0, 255);
+	gOverlayColor = IM_COL32(200, 100, 0, 255);
 
 	for (auto ball : pb::MainTable->BallList)
 	{
@@ -271,8 +221,7 @@ void DebugOverlay::DrawBallDepthSteps()
 			// Snap X coordinate to edge box sides
 			auto x1 = proj::xform_to_2d(vector2{edgeMan.MinX, depthPt->Y}).X;
 			auto x2 = proj::xform_to_2d(vector2{edgeMan.MaxBoxX * edgeMan.AdvanceX + edgeMan.MinX, depthPt->Y}).X;
-			auto ff =  proj::xform_to_2d(vector2{ edgeMan.MaxBoxX * edgeMan.AdvanceX + edgeMan.MinX, depthPt->Y });
-			SDL_RenderDrawLine(winmain::Renderer, x1, pt.Y, x2, pt.Y);
+			OverlayLine(x1, pt.Y, x2, pt.Y);
 		}
 		break;
 	}
@@ -280,7 +229,7 @@ void DebugOverlay::DrawBallDepthSteps()
 
 void DebugOverlay::DrawComponentAabb()
 {
-	SDL_SetRenderDrawColor(winmain::Renderer, 0, 50, 200, 255);
+	gOverlayColor = IM_COL32(0, 50, 200, 255);
 	for (auto cmp : pb::MainTable->ComponentList)
 	{
 		auto collCmp = dynamic_cast<TCollisionComponent*>(cmp);
@@ -289,8 +238,7 @@ void DebugOverlay::DrawComponentAabb()
 			const auto& aabb = collCmp->AABB;
 			auto pt1 = proj::xform_to_2d(vector2{ aabb.XMax, aabb.YMax });
 			auto pt2 = proj::xform_to_2d(vector2{ aabb.XMin, aabb.YMin });
-			SDL_Rect rect{ pt2.X,pt2.Y, pt1.X - pt2.X , pt1.Y - pt2.Y };
-			SDL_RenderDrawRect(winmain::Renderer, &rect);
+			OverlayRect(pt2.X, pt2.Y, pt1.X - pt2.X, pt1.Y - pt2.Y);
 		}
 	}
 }
@@ -302,7 +250,7 @@ void DebugOverlay::DrawCicleType(circle_type& circle)
 	auto pt2 = proj::xform_to_2d(linePt);
 	auto radius = abs(pt2.X - pt1.X);
 
-	SDL_RenderDrawCircle(winmain::Renderer, pt1.X, pt1.Y, radius);
+	OverlayCircle(pt1.X, pt1.Y, radius);
 }
 
 void DebugOverlay::DrawLineType(line_type& line)
@@ -310,7 +258,7 @@ void DebugOverlay::DrawLineType(line_type& line)
 	auto pt1 = proj::xform_to_2d(line.Origin);
 	auto pt2 = proj::xform_to_2d(line.End);
 
-	SDL_RenderDrawLine(winmain::Renderer, pt1.X, pt1.Y, pt2.X, pt2.Y);
+	OverlayLine(pt1.X, pt1.Y, pt2.X, pt2.Y);
 }
 
 void DebugOverlay::DrawEdge(TEdgeSegment* edge)

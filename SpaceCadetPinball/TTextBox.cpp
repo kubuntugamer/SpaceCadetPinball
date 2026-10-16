@@ -150,7 +150,7 @@ void TTextBox::DrawImGui()
 		return;
 
 	char windowName[64];
-	SDL_Rect rect;
+	PBRect rect;
 	ImGuiWindowFlags window_flags =
 		ImGuiWindowFlags_NoBackground |
 		ImGuiWindowFlags_NoDecoration |

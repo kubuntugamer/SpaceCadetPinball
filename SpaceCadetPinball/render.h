@@ -40,7 +40,7 @@ public:
 	static gdrv_bitmap8 *vscreen, *background_bitmap;
 	static zmap_header_type* background_zmap;
 	static int zmap_offsetX, zmap_offsetY;
-	static SDL_Rect DestinationRect;
+	static PBRect DestinationRect;
 
 	static void init(gdrv_bitmap8* bmp, int width, int height);
 	static void uninit();

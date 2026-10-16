@@ -28,6 +28,17 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.1.1" date="2026-10-15">
+            <description>
+                <p>Platform modernization release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>Replaced SDL2 with GLFW for windowing and input, and with Vulkan for rendering.</li>
+                    <li>Replaced SDL2_mixer with a built-in miniaudio software mixer.</li>
+                    <li>MIDI music is rendered by FluidSynth with a General MIDI SoundFont (optional).</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.1.0" date="2023-10-16">
             <description>
                 <p>Feature release focusing on FT compatibility.</p>

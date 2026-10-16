@@ -23,5 +23,9 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 # search programs in the host environment
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 
-# Add the path to your toolchain version of SDL2
-set(SDL2_PATH /usr/${TOOLCHAIN_PREFIX})
+# Point these at your toolchain's GLFW / Vulkan / FluidSynth packages if they are
+# not found in the default mingw sysroot.
+# set(glfw3_DIR /usr/${TOOLCHAIN_PREFIX}/lib/cmake/glfw3)
+# set(Vulkan_INCLUDE_DIR /usr/${TOOLCHAIN_PREFIX}/include)
+# set(FLUIDSYNTH_INCLUDE_DIR /usr/${TOOLCHAIN_PREFIX}/include)
+# set(FLUIDSYNTH_LIBRARY /usr/${TOOLCHAIN_PREFIX}/lib/libfluidsynth.dll.a)

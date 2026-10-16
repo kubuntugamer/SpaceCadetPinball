@@ -1,0 +1,9 @@
+{
+  "name": "spacecadetpinball",
+  "version-string": "2.1.1",
+  "dependencies": [
+    "glfw3",
+    "vulkan",
+    "fluidsynth"
+  ]
+}

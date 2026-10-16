@@ -2,36 +2,34 @@
 #include "gdrv.h"
 
 enum class GameBindings;
+struct GLFWwindow;
+struct ImGuiIO;
 
-struct SdlTickClock
+struct GameTickClock
 {
 	using duration = std::chrono::milliseconds;
 	using rep = duration::rep;
 	using period = duration::period;
-	using time_point = std::chrono::time_point<SdlTickClock>;
+	using time_point = std::chrono::time_point<GameTickClock>;
 	static constexpr bool is_steady = true;
 
 	static time_point now() noexcept
 	{
-		return time_point{duration{SDL_GetTicks()}};
+		return time_point{std::chrono::duration_cast<duration>(std::chrono::steady_clock::now().time_since_epoch())};
 	}
 };
 
-struct SdlPerformanceClock
+struct GamePerformanceClock
 {
 	using duration = std::chrono::duration<uint64_t, std::nano>;
 	using rep = duration::rep;
 	using period = duration::period;
-	using time_point = std::chrono::time_point<SdlPerformanceClock>;
+	using time_point = std::chrono::time_point<GamePerformanceClock>;
 	static constexpr bool is_steady = true;
 
 	static time_point now() noexcept
 	{
-		const auto freq = SDL_GetPerformanceFrequency();
-		const auto ctr = SDL_GetPerformanceCounter();
-		const auto whole = (ctr / freq) * period::den;
-		const auto part = (ctr % freq) * period::den / freq;
-		return time_point(duration(whole + part));
+		return time_point{std::chrono::duration_cast<duration>(std::chrono::steady_clock::now().time_since_epoch())};
 	}
 };
 
@@ -61,15 +59,14 @@ struct WelfordState
 
 class winmain
 {
-	using Clock = SdlPerformanceClock; // Or std::chrono::steady_clock.
+	using Clock = GamePerformanceClock; // Or std::chrono::steady_clock.
 	using DurationMs = std::chrono::duration<double, std::milli>;
 	using TimePoint = std::chrono::time_point<Clock>;
 
 public:
-	static constexpr const char* Version = "2.1.1 DEV";
+	static constexpr const char* Version = "2.1.1";
 	static bool single_step;
-	static SDL_Window* MainWindow;
-	static SDL_Renderer* Renderer;
+	static GLFWwindow* MainWindow;
 	static ImGuiIO* ImIO;
 	static bool LaunchBallEnabled;
 	static bool HighScoresEnabled;
@@ -77,7 +74,6 @@ public:
 	static int MainMenuHeight;
 
 	static int WinMain(LPCSTR lpCmdLine);
-	static int event_handler(const SDL_Event* event);
 	[[ noreturn ]] static void memalloc_failure();
 	static int ProcessWindowMessages();
 	static void a_dialog();
@@ -92,7 +88,7 @@ private:
 	static int mouse_down, last_mouse_x, last_mouse_y;
 	static bool no_time_loss, activated, bQuit, has_focus, DispGRhistory, DispFrameRate;
 	static std::vector<float> gfrDisplay;
-	static std::string FpsDetails, PrevSdlError;
+	static std::string FpsDetails;
 	static bool restart;
 	static bool ShowAboutDialog;
 	static bool ShowImGuiDemo;
@@ -103,7 +99,6 @@ private:
 	static struct optionsStruct& Options;
 	static DurationMs SpinThreshold;
 	static WelfordState SleepState;
-	static unsigned PrevSdlErrorCount;
 	static unsigned gfrOffset;
 	static float gfrWindow;
 	static int CursorIdleCounter;
@@ -113,4 +108,16 @@ private:
 	static void HybridSleep(DurationMs seconds);
 	static void MainLoop();
 	static void ImGuiMenuItemWShortcut(GameBindings binding, bool selected = false);
+
+	// GLFW input callbacks (forward to the ImGui platform backend).
+	static void InstallCallbacks(GLFWwindow* window);
+	static void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+	static void GlfwCharCallback(GLFWwindow* window, unsigned int codepoint);
+	static void GlfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+	static void GlfwCursorPosCallback(GLFWwindow* window, double x, double y);
+	static void GlfwScrollCallback(GLFWwindow* window, double x, double y);
+	static void GlfwWindowFocusCallback(GLFWwindow* window, int focused);
+	static void GlfwWindowCloseCallback(GLFWwindow* window);
+	static void GlfwWindowSizeCallback(GLFWwindow* window, int width, int height);
+	static void PollGamepads();
 };

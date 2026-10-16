@@ -62,7 +62,7 @@ int loader::error(int errorCode, int captionCode)
 
 	if (!errorText)
 		errorText = loader_errors[index].Message;
-	pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, errorCaption, errorText);
+	pb::ShowMessageBox(MessageBoxIcon::Error, errorCaption, errorText);
 	return -1;
 }
 

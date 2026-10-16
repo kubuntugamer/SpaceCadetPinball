@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "pb.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "control.h"
 #include "fullscrn.h"
@@ -584,7 +587,14 @@ void pb::InputDown(GameInput input)
 	IdleTimerMs = 0;
 
 	if (input.Type == InputTypes::Keyboard)
-		control::pbctrl_bdoor_controller(static_cast<char>(input.Value));
+	{
+		// GLFW reports letter keys as uppercase ASCII codes, whereas the original
+		// SDL keycodes were lowercase. The 'bdoor' cheat buffer expects lowercase.
+		auto keyChar = static_cast<char>(input.Value);
+		if (keyChar >= 'A' && keyChar <= 'Z')
+			keyChar = static_cast<char>(keyChar - 'A' + 'a');
+		control::pbctrl_bdoor_controller(keyChar);
+	}
 
 	for (const auto binding : bindings)
 	{
@@ -619,33 +629,33 @@ void pb::InputDown(GameInput input)
 	{
 		switch (input.Value)
 		{
-		case 'b':
+		case GLFW_KEY_B:
 			{
 				vector2 pos{6.0f, 7.0f};
 				if (!MainTable->BallCountInRect(pos, MainTable->CollisionCompOffset * 1.2f) && MainTable->AddBall(pos))
 					MainTable->MultiballCount++;
 				break;
 			}
-		case 'h':
+		case GLFW_KEY_H:
 			{
 				high_score_struct entry{{0}, 1000000000};
 				strncpy(entry.Name, get_rc_string(Msg::STRING127), sizeof entry.Name - 1);
 				high_score::show_and_set_high_score_dialog({entry, 1});
 				break;
 			}
-		case 'r':
+		case GLFW_KEY_R:
 			control::cheat_bump_rank();
 			break;
-		case 's':
+		case GLFW_KEY_S:
 			MainTable->AddScore(static_cast<int>(RandFloat() * 1000000.0f));
 			break;
-		case SDLK_F12:
+		case GLFW_KEY_F12:
 			MainTable->port_draw();
 			break;
-		case 'i':
+		case GLFW_KEY_I:
 			MainTable->LightGroup->Message(MessageCode::TLightFtTmpOverrideOn, 1.0f);
 			break;
-		case 'j':
+		case GLFW_KEY_J:
 			MainTable->LightGroup->Message(MessageCode::TLightFtTmpOverrideOff, 1.0f);
 			break;
 		}
@@ -767,10 +777,14 @@ std::string pb::make_path_name(const std::string& fileName)
 	return BasePath + fileName;
 }
 
-void pb::ShowMessageBox(Uint32 flags, LPCSTR title, LPCSTR message)
+void pb::ShowMessageBox(MessageBoxIcon icon, LPCSTR title, LPCSTR message)
 {
-	fprintf(flags == SDL_MESSAGEBOX_ERROR ? stderr : stdout, "BL error: %s\n%s\n", title, message);
-	SDL_ShowSimpleMessageBox(flags, title, message, winmain::MainWindow);
+	fprintf(icon == MessageBoxIcon::Error ? stderr : stdout, "BL error: %s\n%s\n", title, message);
+#ifdef _WIN32
+	UINT winFlags = icon == MessageBoxIcon::Error ? MB_ICONERROR
+	                                                 : (icon == MessageBoxIcon::Warning ? MB_ICONWARNING : MB_ICONINFORMATION);
+	MessageBoxA(nullptr, message, title, winFlags | MB_OK);
+#endif
 }
 
 float pb::BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance)

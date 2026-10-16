@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "zdrv.h"
 #include "winmain.h"
+#include "vkrender.h"
 
 
 zmap_header_type::zmap_header_type(int width, int height, int stride)
@@ -17,7 +18,7 @@ zmap_header_type::~zmap_header_type()
 {
 	delete[] ZPtr1;
 	if (Texture)
-		SDL_DestroyTexture(Texture);
+		vkrender::destroy_texture(Texture);
 }
 
 int zmap_header_type::pad(int width)
@@ -124,15 +125,7 @@ void zdrv::CreatePreview(zmap_header_type& zMap)
 		src += zMap.Stride - zMap.Width;
 	}
 
-	auto texture = SDL_CreateTexture
-	(
-		winmain::Renderer,
-		SDL_PIXELFORMAT_ARGB8888,
-		SDL_TEXTUREACCESS_STATIC,
-		zMap.Width, zMap.Height
-	);
-	SDL_UpdateTexture(texture, nullptr, tmpBuff, zMap.Width * 4);
-	zMap.Texture = texture;
+	zMap.Texture = vkrender::create_texture(tmpBuff, zMap.Width, zMap.Height, zMap.Width * 4);
 	delete[] tmpBuff;
 }
 
