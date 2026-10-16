@@ -64,7 +64,7 @@ class winmain
 	using TimePoint = std::chrono::time_point<Clock>;
 
 public:
-	static constexpr const char* Version = "2.2.1";
+	static constexpr const char* Version = "2.2.2";
 	static bool single_step;
 	static GLFWwindow* MainWindow;
 	static ImGuiIO* ImIO;

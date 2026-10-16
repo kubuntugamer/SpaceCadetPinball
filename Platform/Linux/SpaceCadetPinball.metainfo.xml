@@ -28,6 +28,17 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.2" date="2026-10-16">
+            <description>
+                <p>Packaging release (native packages).</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>Native <code>.deb</code> (Debian/Ubuntu) and <code>.rpm</code> (Fedora/openSUSE) packages, built with CPack.</li>
+                    <li>A <code>build-packages.sh</code> script to produce them locally.</li>
+                    <li>The release workflow now builds and publishes all formats (AppImage, .deb, .rpm, archives, Windows zip, macOS dmg).</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.2.1" date="2026-10-16">
             <description>
                 <p>Packaging release.</p>

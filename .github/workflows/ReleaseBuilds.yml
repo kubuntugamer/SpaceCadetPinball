@@ -6,14 +6,14 @@ on:
       tag:
         description: "Git tag / release name (e.g. v2.2.2). Leave empty to build only."
         required: false
-        default: "v2.2.1"
+        default: "Release_2.2.2"
       create_release:
         description: "Create a GitHub Release from the built artifacts"
         type: boolean
         default: false
   push:
     tags:
-      - "v*"
+      - "Release_*"
 
 jobs:
   build-macos:

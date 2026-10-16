@@ -9,6 +9,14 @@ project this is forked from.
 Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
+## [2.2.2] - 2026-10-16
+
+### Added
+
+* Native Linux packages: a `.deb` (Debian/Ubuntu) and a `.rpm` (Fedora/openSUSE),
+  built with CPack, plus a `Platform/Linux/build-packages.sh` script to produce
+  them locally. The release workflow now builds and publishes all formats.
+
 ## [2.2.1] - 2026-10-16
 
 ### Added
