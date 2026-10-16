@@ -86,6 +86,7 @@ public:
 private:
 	static int return_value;
 	static int mouse_down, last_mouse_x, last_mouse_y;
+	static bool UiWantsMouse;
 	static bool no_time_loss, activated, bQuit, has_focus, DispGRhistory, DispFrameRate;
 	static std::vector<float> gfrDisplay;
 	static std::string FpsDetails;

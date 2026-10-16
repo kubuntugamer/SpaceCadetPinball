@@ -105,6 +105,7 @@ int winmain::last_mouse_x;
 int winmain::last_mouse_y;
 int winmain::mouse_down;
 bool winmain::no_time_loss = false;
+bool winmain::UiWantsMouse = false;
 
 bool winmain::restart = false;
 
@@ -832,6 +833,13 @@ void winmain::RenderUi()
 
 	// Print game texts on the sidebar
 	gdrv::grtext_draw_ttext_in_box();
+
+	// The menu bar is an always-present transparent window, so merely hovering its
+	// strip sets io.WantCaptureMouse and would swallow clicks meant for the
+	// flippers. Only take the mouse away from the game while the UI is really using
+	// it: a widget is hovered or held, or a menu/popup is open.
+	UiWantsMouse = ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive() ||
+		ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
 static bool GamepadPrev[GLFW_JOYSTICK_LAST + 1][GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
@@ -925,7 +933,7 @@ void winmain::GlfwMouseButtonCallback(GLFWwindow* window, int button, int action
 
 	CursorIdleCounter = 1000;
 
-	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput())
+	if (UiWantsMouse && !options::WaitingForInput())
 	{
 		if (mouse_down)
 		{
@@ -973,7 +981,7 @@ void winmain::GlfwCursorPosCallback(GLFWwindow* window, double x, double y)
 	ImGui_ImplGlfw_CursorPosCallback(window, x, y);
 	CursorIdleCounter = 1000;
 
-	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput() && mouse_down)
+	if (UiWantsMouse && !options::WaitingForInput() && mouse_down)
 	{
 		mouse_down = 0;
 		glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -985,7 +993,7 @@ void winmain::GlfwScrollCallback(GLFWwindow* window, double x, double y)
 	ImGui_ImplGlfw_ScrollCallback(window, x, y);
 	CursorIdleCounter = 1000;
 
-	if (ImIO && ImIO->WantCaptureMouse && !options::WaitingForInput() && mouse_down)
+	if (UiWantsMouse && !options::WaitingForInput() && mouse_down)
 	{
 		mouse_down = 0;
 		glfwSetInputMode(MainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
