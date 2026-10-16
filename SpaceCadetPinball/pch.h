@@ -13,6 +13,16 @@
 // GCC does not have *_s functions
 #define _CRT_SECURE_NO_WARNINGS
 
+// MSVC's <windows.h> defines min and max as macros, which turns every
+// std::min/std::max call in a translation unit that includes it into garbage
+// (error C2589: '(': illegal token on right side of '::'). The code uses
+// std::min/std::max throughout, so keep the macros out entirely.
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+
 // TODO: add headers that you want to pre-compile here
 #include <cstdio>
 #include <cassert>

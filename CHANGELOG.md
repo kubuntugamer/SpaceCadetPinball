@@ -11,7 +11,17 @@ below concerns them.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+* MSVC builds could not compile: `<windows.h>` defines `min` and `max` as
+  macros, which corrupted every `std::min`/`std::max` call in a translation
+  unit that includes it (`error C2589: '(' illegal token on right side of '::'`).
+  The precompiled header now defines `NOMINMAX`, so the MSVC release build and
+  the Windows CI job work again. The mingw and GCC builds were unaffected.
+* The Windows CI job asked for the `Visual Studio 17 2022` generator by name
+  and failed with "could not find any instance of Visual Studio" once the
+  runner image stopped shipping exactly that version. CMake now picks whichever
+  Visual Studio is installed, as `BuildForWindows.ps1` already did.
 
 ## [2.2.0] - 2026-10-16
 
