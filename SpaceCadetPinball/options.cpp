@@ -13,6 +13,11 @@ constexpr int options::MaxUps, options::MaxFps, options::MinUps, options::MinFps
 constexpr int options::MaxSoundChannels, options::MinSoundChannels, options::DefSoundChannels;
 constexpr int options::MaxVolume, options::MinVolume, options::DefVolume;
 
+// Bump this when the meaning of a stored setting changes and values written by an
+// older build have to be discarded instead of being read back as-is.
+static constexpr int ControlBindingsVersion = 1;
+static constexpr const char* ControlBindingsVersionKey = "Control Bindings Version";
+
 std::unordered_map<std::string, std::string> options::settings{};
 bool options::ShowDialog = false;
 GameInput* options::ControlWaitingForInput = nullptr;
@@ -174,6 +179,23 @@ void options::InitPrimary()
 
 	for (const auto opt : AllOptions)
 		opt->Load();
+
+	if (get_int(ControlBindingsVersionKey, 0) < ControlBindingsVersion)
+	{
+		// Control bindings are stored as raw library-specific key/button codes. The
+		// SDL2-based build stored SDL codes, and GLFW uses different numbers for most
+		// keys and buttons, so reading such a file as GLFW values silently scrambles
+		// every control. A file without this marker predates the GLFW port, so drop
+		// its bindings once and persist the defaults. High scores and every other
+		// setting are left untouched.
+		for (auto& control : Options.Key)
+		{
+			control.Reset();
+			control.Save();
+		}
+		set_int(ControlBindingsVersionKey, ControlBindingsVersion);
+	}
+
 	PostProcessOptions();
 }
 
