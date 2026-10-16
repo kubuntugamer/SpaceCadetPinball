@@ -53,3 +53,24 @@ required, and no SoundFont is bundled - music uses the system one or
 FluidSynth packages ship a default soundfont in the following path:
 On Fedora: `/usr/share/soundfonts/FluidR3_GM.sf2`
 On Ubuntu/Debian: `/usr/share/sounds/sf2/FluidR3_GM.sf2`
+
+## Native packages
+
+`build-packages.sh` turns the Linux build into installable packages using CPack:
+
+```bash
+./build-packages.sh
+```
+
+It produces, in `build/` (and copies them to `bin/`):
+
+- `spacecadetpinball_<version>_amd64.deb` - for Debian/Ubuntu
+- `spacecadetpinball-<version>-1.x86_64.rpm` - for Fedora/openSUSE (needs `rpmbuild`)
+- `SpaceCadetPinball-<version>-Linux.tar.gz` / `.zip` - generic
+
+The packages install the engine, desktop entry, icons and AppStream metadata. The
+game data (PINBALL.DAT, SOUND*.WAV, ...) is copyrighted by Microsoft and is
+**not** included - drop it into `/usr/share/SpaceCadetPinball/` (or any of the
+other search paths the game prints) afterwards. Music needs a SoundFont; the
+package recommends `fluid-soundfont-gm` on Debian and the equivalent on RPM
+distros.

@@ -253,9 +253,37 @@ if(UNIX AND NOT APPLE)
 	endforeach(S)
 endif()
 
-# Packaging: the binary only, game data is provided by the user.
+# Version: single source of truth is the constant the game reports.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball/winmain.h" _scp_winmain_h)
+string(REGEX MATCH "Version = \"([0-9.]+)\"" _scp_ver_match "${_scp_winmain_h}")
+set(SPACECADETPINBALL_VERSION "${CMAKE_MATCH_1}")
+if(NOT SPACECADETPINBALL_VERSION)
+	set(SPACECADETPINBALL_VERSION "2.2.1")
+endif()
+
+# Packaging: the binary plus desktop integration. Game data is provided by the
+# user (it is copyrighted by Microsoft and cannot be redistributed).
 set(CPACK_PACKAGE_NAME "SpaceCadetPinball")
-set(CPACK_PACKAGE_VENDOR "SpaceCadetPinball")
-set(CPACK_PACKAGE_VERSION "2.2.1")
-set(CPACK_GENERATOR "TGZ;ZIP")
+set(CPACK_PACKAGE_VENDOR "k4zmu2a")
+set(CPACK_PACKAGE_VERSION "${SPACECADETPINBALL_VERSION}")
+set(CPACK_PACKAGE_CONTACT "k4zmu2a <k4zmu2a@gmail.com>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Decompilation of 3D Pinball for Windows - Space Cadet")
+set(CPACK_PACKAGE_DESCRIPTION "Reverse engineering of '3D Pinball for Windows - Space Cadet', a game bundled with Windows.")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_GENERATOR "TGZ;ZIP;DEB;RPM")
+
+# Debian
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SECTION "games")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libfluidsynth3, fluid-soundfont-gm")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+# RPM
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+set(CPACK_RPM_PACKAGE_GROUP "Amusements/Games")
+set(CPACK_RPM_PACKAGE_RECOMMENDS "fluidsynth-libs, fluid-soundfont-gm")
+
 include(CPack)

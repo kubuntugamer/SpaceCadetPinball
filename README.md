@@ -65,8 +65,12 @@ chmod +x SpaceCadetPinball-<version>-x86_64.AppImage
 ./SpaceCadetPinball-<version>-x86_64.AppImage
 ```
 
-It needs a Vulkan-capable driver. Otherwise install `glfw`, `vulkan` and
-(optionally) `fluidsynth` development packages and build with CMake – see
+It needs a Vulkan-capable driver. Native packages (`.deb` for Debian/Ubuntu,
+`.rpm` for Fedora/openSUSE) and a generic `.tar.gz`/`.zip` are also produced
+by the release builds; install the one matching your distribution, then drop the
+game data (PINBALL.DAT, SOUND*.WAV, ...) into `/usr/share/SpaceCadetPinball/`.
+Otherwise install `glfw`, `vulkan` and (optionally) `fluidsynth` development
+packages and build with CMake – see
 [Platform/Linux/BUILD.md](Platform/Linux/BUILD.md). Distribution packages and a
 Flatpak of the upstream project exist as well, and usually track this code.
 

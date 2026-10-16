@@ -1,6 +1,19 @@
 name: Make Release Builds
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag / release name (e.g. v2.2.2). Leave empty to build only."
+        required: false
+        default: "v2.2.1"
+      create_release:
+        description: "Create a GitHub Release from the built artifacts"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
 
 jobs:
   build-macos:
@@ -36,3 +49,59 @@ jobs:
         with:
           name: windows-build
           path: bin/SpaceCadetPinball*Win.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev rpm
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Build packages (.deb, .rpm, archives, AppImage)
+        run: |
+          ./Platform/Linux/build-packages.sh
+          ./Platform/Linux/build-appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            build/spacecadetpinball_*.deb
+            build/spacecadetpinball-*.rpm
+            build/SpaceCadetPinball-*.tar.gz
+            build/SpaceCadetPinball-*.zip
+            bin/SpaceCadetPinball-*.AppImage
+
+  release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows, build-linux]
+    if: github.event_name == 'push' || inputs.create_release == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          name: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          files: artifacts/**/*
+          generate_release_notes: true
+          draft: false
