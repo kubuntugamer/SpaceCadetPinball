@@ -1058,6 +1058,18 @@ int winmain::ProcessWindowMessages()
 {
 	glfwPollEvents();
 	PollGamepads();
+
+	// The Exit menu item and the exit dialog request a close with
+	// glfwSetWindowShouldClose(). Unlike a window manager close request that only
+	// sets GLFW's shouldClose flag and does not invoke the close callback, so run
+	// that same shutdown path here. bQuit guards against running it twice when
+	// GLFW already called the callback for a real window close request.
+	if (!bQuit && glfwWindowShouldClose(MainWindow))
+	{
+		glfwSetWindowShouldClose(MainWindow, GLFW_FALSE);
+		GlfwWindowCloseCallback(MainWindow);
+	}
+
 	return 1;
 }
 
