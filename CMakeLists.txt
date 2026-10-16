@@ -163,6 +163,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/TWall.h
         SpaceCadetPinball/winmain.cpp
         SpaceCadetPinball/winmain.h
+        SpaceCadetPinball/update.cpp
+        SpaceCadetPinball/update.h
         SpaceCadetPinball/zdrv.cpp
         SpaceCadetPinball/zdrv.h
         SpaceCadetPinball/vkrender.cpp

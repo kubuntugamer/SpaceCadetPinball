@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "winmain.h"
+#include "update.h"
 
 #include "control.h"
 #include "EmbeddedData.h"
@@ -79,6 +80,12 @@ namespace
 	{
 #ifdef _WIN32
 		ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+		std::string cmd = "open \"";
+		cmd += url;
+		cmd += "\" >/dev/null 2>&1 &";
+		if (system(cmd.c_str()) != 0)
+			printf("Failed to open URL: %s\n", url);
 #else
 		std::string cmd = "xdg-open \"";
 		cmd += url;
@@ -777,6 +784,12 @@ void winmain::RenderUi()
 			}
 			ImGui::Separator();
 
+			if (ImGui::MenuItem("Check for Updates..."))
+			{
+				update::CheckAsync();
+			}
+			ImGui::Separator();
+
 			if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu1_About_Pinball)))
 			{
 				pause(false);
@@ -793,6 +806,7 @@ void winmain::RenderUi()
 	a_dialog();
 	high_score::RenderHighScoreDialog();
 	font_selection::RenderDialog();
+	update::Render();
 	if (ShowSpriteViewer)
 		render::SpriteViewer(&ShowSpriteViewer);
 	options::RenderControlDialog();
