@@ -9,15 +9,22 @@ project this is forked from.
 Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
-## [Unreleased]
+## [2.2.1] - 2026-10-16
 
 ### Added
 
+* An AppImage build (`Platform/Linux/build-appimage.sh`), which packages the
+  game so Linux users can run it from a single file without installing
+  anything.
 * `Platform/Linux/BUILD.md` documents what running on Wayland needs: GLFW 3.4
   or newer selects a backend at start-up and picks Wayland, while the older 3.3
   packages are single-backend and fall back to XWayland.
 
 ### Fixed
+
+* The in-game version string was hardcoded and had not been bumped since 2.1.1,
+  so 2.2.0 builds reported the wrong version in the menu, in the stdout log and
+  to the Vulkan driver. It now tracks the release version.
 
 * MSVC builds could not compile: `<windows.h>` defines `min` and `max` as
   macros, which corrupted every `std::min`/`std::max` call in a translation

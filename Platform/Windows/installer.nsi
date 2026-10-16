@@ -19,7 +19,7 @@ Unicode true
 !include "MUI2.nsh"
 
 !define APPNAME "Space Cadet Pinball"
-!define APPVERSION "2.2.0"
+!define APPVERSION "2.2.1"
 !define EXENAME "SpaceCadetPinball.exe"
 !define REGKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpaceCadetPinball"
 
@@ -41,7 +41,7 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 BrandingText "${APPNAME} ${APPVERSION}"
 
-VIProductVersion "2.2.0.0"
+VIProductVersion "2.2.1.0"
 VIAddVersionKey /LANG=1033 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=1033 "FileDescription" "${APPNAME} setup"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APPVERSION}"

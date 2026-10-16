@@ -455,9 +455,9 @@ namespace
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "SpaceCadetPinball";
-		appInfo.applicationVersion = VK_MAKE_VERSION(2, 1, 1);
+		appInfo.applicationVersion = VK_MAKE_VERSION(2, 2, 1);
 		appInfo.pEngineName = "SpaceCadetPinball";
-		appInfo.engineVersion = VK_MAKE_VERSION(2, 1, 1);
+		appInfo.engineVersion = VK_MAKE_VERSION(2, 2, 1);
 		appInfo.apiVersion = VK_API_VERSION_1_0;
 
 		VkInstanceCreateInfo info{};

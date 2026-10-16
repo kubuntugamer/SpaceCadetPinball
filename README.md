@@ -57,10 +57,18 @@ Download or build the release, then either:
 
 ### Linux
 
-Install `glfw`, `vulkan` and (optionally) `fluidsynth` development packages and
-build with CMake – see [Platform/Linux/BUILD.md](Platform/Linux/BUILD.md).
-Distribution packages and a Flatpak of the upstream project exist as well, and
-usually track this code.
+Download or build the release. The AppImage is one file that needs no
+installation – make it executable and run it:
+
+```bash
+chmod +x SpaceCadetPinball-<version>-x86_64.AppImage
+./SpaceCadetPinball-<version>-x86_64.AppImage
+```
+
+It needs a Vulkan-capable driver. Otherwise install `glfw`, `vulkan` and
+(optionally) `fluidsynth` development packages and build with CMake – see
+[Platform/Linux/BUILD.md](Platform/Linux/BUILD.md). Distribution packages and a
+Flatpak of the upstream project exist as well, and usually track this code.
 
 The game runs natively on Wayland with GLFW 3.4 or newer; see
 [Wayland](Platform/Linux/BUILD.md#wayland).

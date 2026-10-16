@@ -28,6 +28,17 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.1" date="2026-10-16">
+            <description>
+                <p>Packaging release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>An AppImage is built for Linux, so the game can be run without installing it.</li>
+                    <li>The in-game version string matches the release again; it had been stuck at 2.1.1.</li>
+                    <li>MSVC builds compile again, which also unbreaks the documented Windows release path.</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.2.0" date="2026-10-16">
             <description>
                 <p>Packaging and input-fix release.</p>

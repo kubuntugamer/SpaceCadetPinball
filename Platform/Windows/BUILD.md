@@ -58,3 +58,17 @@ SpaceCadetPinball-Setup.exe /S /D=C:\Games\SpaceCadetPinball   # silent, /D= las
 Uninstall with `Uninstall.exe` from the install folder, or from
 *Settings > Apps > Installed apps*.  Options and high scores live in
 `%APPDATA%\SpaceCadetPinball` and are kept.
+
+## 4. Portable build
+
+For users who would rather not install anything, `build-portable.sh` packs the
+same `bin\` folder into a zip:
+
+```bash
+./build-portable.sh
+```
+
+It writes `bin\SpaceCadetPinball-<version>-win64-portable.zip`, holding the
+game, its runtime DLLs, the game data and the SoundFont in one folder, with
+`PLAYER-README.txt` as `README.txt`.  Unpack and run; nothing is installed and
+nothing is written outside that folder.

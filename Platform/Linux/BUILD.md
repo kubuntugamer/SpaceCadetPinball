@@ -31,6 +31,22 @@ Check your version with `pkg-config --modversion glfw3`.
 
 **On Wayland an application cannot position its own windows**; the compositor decides placement. The game saves its windowed position when it goes full screen and restores it on the way back, so on Wayland that restore is a no-op and the window reappears wherever the compositor puts it. Full screen itself works normally.
 
+## AppImage
+
+`build-appimage.sh` packs the Linux build from `bin/` into a single file that
+runs without installing anything:
+
+```bash
+./build-appimage.sh
+```
+
+It writes `bin/SpaceCadetPinball-<version>-x86_64.AppImage`, carrying the game,
+the game data and the libraries the build needs. The display server, GPU driver
+and audio stack come from the host, so a Vulkan-capable driver is still
+required, and no SoundFont is bundled - music uses the system one or
+`SCP_SOUNDFONT`. The first run needs `curl` and network access to fetch
+`appimagetool` into `~/.cache`; set `APPIMAGETOOL` to use an existing copy.
+
 **If you can't hear the background music**: FluidSynth needs a General MIDI SoundFont. The game auto-detects common system locations, but you can point it at a specific file:
 `export SCP_SOUNDFONT=/path/to/your/soundfont`
 
