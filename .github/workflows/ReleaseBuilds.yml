@@ -21,3 +21,18 @@ jobs:
         with:
           name: mac-build
           path: SpaceCadetPinball-*-mac.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (x86 + x64)
+        shell: pwsh
+        run: ./BuildForWindows.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: bin/SpaceCadetPinball*Win.zip

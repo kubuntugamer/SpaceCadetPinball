@@ -333,6 +333,25 @@ namespace
 		if (env && *env && FileExists(env))
 			return env;
 
+		// A SoundFont shipped next to the executable takes precedence over the
+		// system-wide locations below, so a portable install (or a packaged
+		// build) works without SCP_SOUNDFONT. Windows accepts '/' as a path
+		// separator, so one list serves every platform.
+		const char* localCandidates[] = {
+			"soundfonts/FluidR3_GM.sf2",
+			"soundfonts/FluidR3_GS.sf2",
+			"soundfonts/default.sf2",
+			"soundfonts/default-GM.sf2",
+			"soundfonts/TimGM6mb.sf2",
+			"FluidR3_GM.sf2",
+		};
+		for (auto candidate : localCandidates)
+		{
+			auto path = pb::make_path_name(candidate);
+			if (FileExists(path))
+				return path;
+		}
+
 		const char* candidates[] = {
 #ifdef _WIN32
 			"C:\\soundfonts\\FluidR3_GM.sf2",
