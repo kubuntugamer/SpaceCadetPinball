@@ -25,9 +25,11 @@ jobs:
           ref: master
 
       - name: Install dependencies
-        run: brew install glfw vulkan-loader molten-vk
+        run: brew install glfw vulkan-loader molten-vk fluid-synth dylibbundler
 
       - run: bash build-mac-app.sh
+        env:
+          CMAKE_OSX_ARCHITECTURES: arm64
 
       - uses: actions/upload-artifact@v4
         with:

@@ -11,7 +11,7 @@
 set -xe
 
 app_name='SpaceCadetPinball'
-sw_version='2.2.1'
+sw_version='2.2.2'
 dmg_name="${app_name}-${sw_version}-mac.dmg"
 
 brew_prefix=''
@@ -31,8 +31,13 @@ for formula in glfw vulkan-loader molten-vk; do
 	fi
 done
 
-# Build
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+# Build. Honor CMAKE_OSX_ARCHITECTURES when set (e.g. arm64 on CI runners
+# that lack the x86_64 libraries); otherwise build universal.
+cmake_arch_args=()
+if [ -n "${CMAKE_OSX_ARCHITECTURES:-}" ]; then
+	cmake_arch_args+=("-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}")
+fi
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${cmake_arch_args[@]}"
 cmake --build build
 
 mkdir -p "${app_name}.app/Contents/MacOS"
