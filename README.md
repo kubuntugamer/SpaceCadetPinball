@@ -62,6 +62,9 @@ build with CMake – see [Platform/Linux/BUILD.md](Platform/Linux/BUILD.md).
 Distribution packages and a Flatpak of the upstream project exist as well, and
 usually track this code.
 
+The game runs natively on Wayland with GLFW 3.4 or newer; see
+[Wayland](Platform/Linux/BUILD.md#wayland).
+
 ### macOS
 
 Build the app bundle with `./build-mac-app.sh`; it produces

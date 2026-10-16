@@ -11,6 +11,12 @@ below concerns them.
 
 ## [Unreleased]
 
+### Added
+
+* `Platform/Linux/BUILD.md` documents what running on Wayland needs: GLFW 3.4
+  or newer selects a backend at start-up and picks Wayland, while the older 3.3
+  packages are single-backend and fall back to XWayland.
+
 ### Fixed
 
 * MSVC builds could not compile: `<windows.h>` defines `min` and `max` as

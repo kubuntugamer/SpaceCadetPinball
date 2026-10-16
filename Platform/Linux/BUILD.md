@@ -17,6 +17,20 @@ cmake -GNinja .
 ninja
 ```
 
+## Wayland
+
+The game runs natively on Wayland. Windowing is done with GLFW, so this needs **GLFW 3.4 or newer**: it selects a backend at start-up and picks Wayland whenever the session offers it.
+
+Older GLFW (3.3, which older Debian and Ubuntu still ship) cannot select at run time - its packages are built for one backend, and the default is X11, so those systems run the game through XWayland. There, install the Wayland flavour to get the Wayland backend:
+
+```bash
+sudo apt install libglfw3-dev libglfw3-wayland
+```
+
+Check your version with `pkg-config --modversion glfw3`.
+
+**On Wayland an application cannot position its own windows**; the compositor decides placement. The game saves its windowed position when it goes full screen and restores it on the way back, so on Wayland that restore is a no-op and the window reappears wherever the compositor puts it. Full screen itself works normally.
+
 **If you can't hear the background music**: FluidSynth needs a General MIDI SoundFont. The game auto-detects common system locations, but you can point it at a specific file:
 `export SCP_SOUNDFONT=/path/to/your/soundfont`
 
