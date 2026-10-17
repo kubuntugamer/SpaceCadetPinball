@@ -6,19 +6,24 @@
 #include <thread>
 #include <vector>
 #include <cstdlib>
-#include <unistd.h>
 #include <sys/stat.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>      // MSVC's _access/_unlink live here, not in <unistd.h>
 #define POPEN _popen
 #define PCLOSE _pclose
+#define SCP_UNLINK _unlink
+// MSVC's _access() has no execute bit, so mode 0 asks whether the file exists.
+// Like POSIX access(), it does not search PATH - which is what the pkexec
+// probe in do_install() relies on.
+#define SCP_ACCESS_EXISTS(p) _access((p), 0)
 #else
+#include <unistd.h>  // readlink(), access(), unlink(), X_OK
 #define POPEN popen
 #define PCLOSE pclose
+#define SCP_UNLINK unlink
+#define SCP_ACCESS_EXISTS(p) access((p), X_OK)
 #endif
 
 namespace {
@@ -443,7 +448,7 @@ void do_install() {
     // Install via package manager with admin privileges
     // Try pkexec first (PolicyKit), fall back to dpkg -i
     std::string install_cmd;
-    if (access("pkexec", X_OK)) {
+    if (SCP_ACCESS_EXISTS("pkexec")) {
         install_cmd = "pkexec apt-get update && pkexec apt-get install -y "" + dest + """;
     } else {
         install_cmd = "dpkg -i "" + dest + """;
@@ -474,6 +479,6 @@ void do_install() {
     }
 
     // Clean up downloaded file
-    unlink(dest.c_str());
+    SCP_UNLINK(dest.c_str());
 }
 } // namespace update
