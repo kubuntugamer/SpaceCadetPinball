@@ -16,6 +16,8 @@ TBumper::TBumper(TPinballTable* table, int groupIndex) : TCollisionComponent(tab
 	Timer = 0;
 	TimerTime = *loader::query_float_attribute(groupIndex, 0, 407);
 	loader::query_visual(groupIndex, 0, &visual);
+	HardHitSoundId = visual.SoundIndex4;
+	SoftHitSoundId = visual.SoundIndex3;
 	SoundIndex4 = visual.SoundIndex4;
 	SoundIndex3 = visual.SoundIndex3;
 	OriginalThreshold = Threshold;

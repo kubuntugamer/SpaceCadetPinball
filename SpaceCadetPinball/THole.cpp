@@ -52,6 +52,8 @@ THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	Field.CollisionComp = this;
 	Field.CollisionGroup = visual.CollisionGroup;
 	TTableLayer::edges_insert_circle(&circle, nullptr, &Field);
+	HardHitSoundId = visual.SoundIndex4;
+	SoftHitSoundId = visual.SoundIndex3;
 }
 
 int THole::Message(MessageCode code, float value)
