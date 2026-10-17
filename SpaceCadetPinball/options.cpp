@@ -126,7 +126,11 @@ optionsStruct options::Options
 		},
 	},
 	{"Sounds", true},
-	{"Music", false},
+	// Music is part of the original game's presentation, so play it unless the
+	// user opts out. midi::music_init() still forces this off when FluidSynth
+	// or a SoundFont is unavailable (winmain.cpp), so a system that cannot
+	// play music at all is unaffected by this default.
+	{"Music", true},
 	{"FullScreen", false},
 	{"Players", 1},
 	{"Screen Resolution", -1},
