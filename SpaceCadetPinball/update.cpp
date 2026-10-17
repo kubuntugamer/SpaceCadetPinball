@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "update.h"
 #include "winmain.h"
+#include "options.h"
 
 #include <mutex>
 #include <thread>
@@ -282,6 +283,21 @@ void CheckAsync() {
 		g_checking = true;
 	}
 	std::thread([]() { do_check(); }).detach();
+}
+
+void CheckOnStartup() {
+	// Once per process. WinMain runs inside a do/while(restart) loop, so
+	// without this an update that was just installed would be re-checked for
+	// the moment the game relaunches into it.
+	static bool checked = false;
+	if (checked) return;
+	checked = true;
+
+	// Option defaults to on; see Options -> Check for Updates on Startup.
+	// Read through options::Options, the public accessor that winmain::Options
+	// aliases - winmain's own member is private to that class.
+	if (!options::Options.CheckForUpdatesOnStartup.V) return;
+	CheckAsync();
 }
 
 

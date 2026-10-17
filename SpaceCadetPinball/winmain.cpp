@@ -312,6 +312,10 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		else
 			pb::replay_level(false);
 
+		// Silent background update check; the dialog only appears if a newer
+		// release actually exists. Honours "Check for Updates on Startup".
+		update::CheckOnStartup();
+
 		MainLoop();
 
 		options::uninit();
