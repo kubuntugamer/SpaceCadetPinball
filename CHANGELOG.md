@@ -11,8 +11,28 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-10-17
+
+### Fixed
+
+* The startup update check described under 2.2.3 never ran: the option was
+  read, but the check was not wired into the start-up path, so it reported
+  "up to date" without ever contacting GitHub. It now runs once per launch,
+  silently in the background, and the *Check for Updates on Startup* preference
+  still turns it off.
+* Package-manager installs could not actually install an update, so 2.2.3's
+  self-update only worked for portable builds. The package type detection could
+  not see `PATH`, the shell commands handed to `system()` were malformed, the
+  install lock was held across the download and the polkit prompt, and the
+  dialog had no *Installing* or *Installed* state. `.deb` and `.rpm` installs
+  now download the new release and hand it to `pkexec apt-get install`, `dpkg`,
+  `dnf` or `rpm`, with progress and a restart prompt.
+
 ### Changed
 
+* Music is on by default. It is part of the original game's presentation, but a
+  fresh profile started with it muted, so the published packages played no
+  music until it was turned on by hand.
 * The `.deb` and `.rpm` now **require** a General MIDI SoundFont
   (`fluid-soundfont-gm`) instead of merely recommending it, so an install with
   `--no-install-recommends` no longer loses music silently. The `.deb` also

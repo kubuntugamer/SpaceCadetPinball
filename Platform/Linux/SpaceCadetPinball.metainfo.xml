@@ -28,6 +28,16 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.4" date="2026-10-17">
+            <description>
+                <p>Music and self-update release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>Music and stereo sound effects are on by default, and the packages now <code>Require</code> a General MIDI SoundFont so music always has something to play.</li>
+                    <li>The start-up update check now actually runs, and on <code>.deb</code> and <code>.rpm</code> installs the update is handed to the package manager, which asks for administrator rights.</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.2.3" date="2026-10-17">
             <description>
                 <p>Self-update release.</p>
