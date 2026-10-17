@@ -28,6 +28,15 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.5" date="2026-10-17">
+            <description>
+                <p>Visual release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>The table's lights now glow and twinkle. The renderer already carried this bloom and sparkle post-processing, built and shipped, but nothing ever switched it on.</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.2.4" date="2026-10-17">
             <description>
                 <p>Music and self-update release.</p>

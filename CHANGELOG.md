@@ -11,6 +11,8 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.5] - 2026-10-17
+
 ### Changed
 
 * The table's lights now glow and twinkle. The Vulkan renderer already carried
