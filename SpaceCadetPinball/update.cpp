@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 #include <cstdlib>
+#include <unistd.h>
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -28,6 +29,8 @@ std::string g_error;
 float g_progress = 0.0f;
 bool g_downloading = false;
 bool g_checking = false;
+bool g_installing = false;
+bool g_installed = false;
 
 std::string run_command(const std::string& cmd) {
 	std::string out;
@@ -276,6 +279,24 @@ void CheckAsync() {
 	std::thread([]() { do_check(); }).detach();
 }
 
+
+bool IsPackageManaged() {
+#ifdef _WIN32
+    return false;
+#else
+    char buf[4096];
+    auto len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return false;
+    buf[len] = 0;
+    std::string exe(buf);
+    std::string cmd = "dpkg -S " + exe + " >/dev/null 2>&1";
+    if (system(cmd.c_str()) == 0) return true;
+    cmd = "rpm -qf " + exe + " >/dev/null 2>&1";
+    if (system(cmd.c_str()) == 0) return true;
+    return false;
+#endif
+}
+
 void DownloadAsync() {
 	bool expected = false;
 	{
@@ -370,4 +391,89 @@ void Render() {
 	if (st == Status::Idle) popup_open = false;
 }
 
+
+void do_install() {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    g_status = update::Status::Installing;
+    g_installing = true;
+    g_progress = 0.0f;
+    g_installed = false;
+    g_error.clear();
+
+    // Use the package info from the latest check
+    const auto& info = g_info;
+    if (info.download_url.empty() && info.package_url.empty()) {
+        g_status = update::Status::Error;
+        g_error = "No update information available. Check for updates first.";
+        g_installing = false;
+        return;
+    }
+
+    std::string deb_url = info.package_url;
+    if (deb_url.empty()) {
+        deb_url = info.download_url;
+    }
+
+    if (deb_url.empty() || deb_url.find(".deb") == std::string::npos) {
+        g_status = update::Status::Error;
+        g_error = "No .deb package available for this platform.";
+        g_installing = false;
+        return;
+    }
+
+    // Download the .deb file
+    std::string name = deb_url.substr(deb_url.find_last_of('/') + 1);
+    std::string tmp_dir = temp_dir();
+    std::string dest = tmp_dir + name;
+    std::string dl_cmd = "curl -s -L -m 300 -o "" + dest + "" "" + deb_url + """;
+    run_command(dl_cmd);
+
+    // Verify download
+    FILE* f = fopen(dest.c_str(), "rb");
+    bool ok = f != nullptr;
+    if (f) { fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f); if (sz <= 0) ok = false; }
+
+    if (!ok) {
+        g_status = update::Status::Error;
+        g_error = "Failed to download .deb file.";
+        g_installing = false;
+        return;
+    }
+
+    // Install via package manager with admin privileges
+    // Try pkexec first (PolicyKit), fall back to dpkg -i
+    std::string install_cmd;
+    if (access("pkexec", X_OK)) {
+        install_cmd = "pkexec apt-get update && pkexec apt-get install -y "" + dest + """;
+    } else {
+        install_cmd = "dpkg -i "" + dest + """;
+    }
+
+    int result = system(install_cmd.c_str());
+
+    if (result == 0) {
+        g_progress = 1.0f;
+        g_installed = true;
+        g_status = update::Status::Installed;
+        g_installing = false;
+        g_error = " .deb installed successfully.";
+    } else {
+        std::string fallback = "dpkg -i "" + dest + """;
+        int fallback_result = system(fallback.c_str());
+        if (fallback_result == 0) {
+            g_progress = 1.0f;
+            g_installed = true;
+            g_status = update::Status::Installed;
+            g_installing = false;
+            g_error = " .deb installed successfully via dpkg.";
+        } else {
+            g_status = update::Status::Error;
+            g_error = "Failed to install .deb package. Try: dpkg -i <file> or pkexec apt-get install -y <file>";
+            g_installing = false;
+        }
+    }
+
+    // Clean up downloaded file
+    unlink(dest.c_str());
+}
 } // namespace update
