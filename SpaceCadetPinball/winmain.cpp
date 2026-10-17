@@ -245,6 +245,18 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 			return 1;
 		}
 
+		// Turn on the post-processing the renderer already carries: a bloom glow
+		// around the table's lights and a twinkle on their bright cores. The
+		// passes, shaders and pipelines are built and shipped either way, so
+		// this only sets the two intensities; 0 disables that effect.
+		//
+		// Bloom is composited at intensity * 3.0 (vkrender.cpp), so 0.35 here is
+		// about 1.05x the blurred bright-pass energy on the brightest pixels --
+		// enough to lift the lights off the backdrop without washing out the
+		// sprites. Sparkle is masked by luminance, so it only glints on the
+		// lit parts of the table rather than the whole frame.
+		vkrender::set_effects(0.35f, 0.6f);
+
 		// ImGui platform backend. We install GLFW callbacks ourselves (above)
 		// and forward events to these backend functions, so ImGui must not
 		// install its own callbacks (that would recurse).
