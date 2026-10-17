@@ -290,13 +290,20 @@ set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SECTION "games")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libfluidsynth3, fluid-soundfont-gm")
+# Music is a first-class feature, not an optional extra, so the General MIDI
+# SoundFont is a hard dependency: an install with --no-install-recommends must
+# not lose music silently. libfluidsynth3 needs no entry here, dpkg-shlibdeps
+# adds it from the binary's DT_NEEDED.
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "fluid-soundfont-gm")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 # RPM
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
 set(CPACK_RPM_PACKAGE_LICENSE "MIT")
 set(CPACK_RPM_PACKAGE_GROUP "Amusements/Games")
-set(CPACK_RPM_PACKAGE_RECOMMENDS "fluidsynth-libs, fluid-soundfont-gm")
+# CPack does not derive RPM dependencies from the linked libraries, so both the
+# library and the SoundFont are named explicitly, and as Requires rather than
+# Recommends for the same reason as the .deb above.
+set(CPACK_RPM_PACKAGE_REQUIRES "fluidsynth-libs, fluid-soundfont-gm")
 
 include(CPack)

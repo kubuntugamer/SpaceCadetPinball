@@ -9,6 +9,19 @@ project this is forked from.
 Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
+## [Unreleased]
+
+### Changed
+
+* The `.deb` and `.rpm` now **require** a General MIDI SoundFont
+  (`fluid-soundfont-gm`) instead of merely recommending it, so an install with
+  `--no-install-recommends` no longer loses music silently. The `.deb` also
+  drops a redundant Recommends entry for `libfluidsynth3`, which
+  `dpkg-shlibdeps` already records as a hard dependency from the binary.
+* **Stereo Sound Effects** are on by default. Sound effects are panned by their
+  position on the table and attenuated gently with distance; a centred source
+  keeps the same level as it had with the previous default.
+
 ## [2.2.3] - 2026-10-17
 
 ### Added

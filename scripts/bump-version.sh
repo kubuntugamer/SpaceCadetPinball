@@ -127,6 +127,12 @@ marker = "## ["
 i = text.find(marker)
 if i < 0:
     raise SystemExit("CHANGELOG.md: no '## [' heading found to insert before")
+# A pending "## [Unreleased]" block stays at the very top, so a new release
+# section belongs underneath it rather than above it.
+if text.startswith("## [Unreleased]", i):
+    j = text.find(marker, i + len(marker))
+    if j > 0:
+        i = j
 stub = "## [%s] - %s\n\n<!-- Describe this release below, then remove this line. -->\n\n" % (ver, date)
 text = text[:i] + stub + text[i:]
 io.open(path, "w", encoding="utf-8").write(text)

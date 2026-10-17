@@ -147,7 +147,10 @@ optionsStruct options::Options
 	{"Integer Scaling", false},
 	{"Sound Volume", DefVolume},
 	{"Music Volume", DefVolume},
-	{"Stereo Sound Effects", false},
+	// Stereo sound effects pan by position on the table and attenuate gently
+	// with distance (Sound::PlaySound); a centred source keeps the same level
+	// as the mono path, so this is the fuller presentation by default.
+	{"Stereo Sound Effects", true},
 	{"Debug Overlay", false},
 	{"Debug Overlay Grid", true},
 	{"Debug Overlay All Edges", true},
