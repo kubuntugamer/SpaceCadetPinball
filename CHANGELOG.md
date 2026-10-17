@@ -11,6 +11,22 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-10-17
+
+### Changed
+
+* The table's lights now glow and twinkle. The Vulkan renderer already carried
+  a complete bloom and sparkle pipeline -- bright-pass, separable blur,
+  additive composite and a luminance-masked twinkle -- built into pipelines and
+  shipped in the binary, but nothing ever enabled it and both intensities sat
+  at zero. They are now on at a fixed, tuned strength. There is deliberately no
+  new preference for this; the look is part of the game's presentation rather
+  than a setting, and turning it off means rebuilding.
+
+## [2.2.6] - 2026-10-17
+
+<!-- Describe this release below, then remove this line. -->
+
 ## [2.2.5] - 2026-10-17
 
 ### Changed
