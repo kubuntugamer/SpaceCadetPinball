@@ -37,17 +37,22 @@ fi
 	exit 1
 }
 
+# Single source of truth for the version: the VERSION file at the repo root.
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+[ -n "$VERSION" ] || { echo "Could not read the version from VERSION" >&2; exit 1; }
+
 # Size (KB) shown in Add/Remove Programs.
 datasize="$(du -sk "$ROOT/bin" | cut -f1)"
 
 echo "makensis  : ${makensis[*]}"
+echo "version   : ${VERSION}"
 echo "source    : $winsrc"
 echo "size      : ${datasize} KB"
 
 # makensis reads any argument starting with '/' as an option, so the script has
 # to be named relative to the working directory.
 cd "$HERE"
-WINEDEBUG="${WINEDEBUG:-}" "${makensis[@]}" /V3 /DSRCDIR="$winsrc" /DDATASIZE="$datasize" installer.nsi
+WINEDEBUG="${WINEDEBUG:-}" "${makensis[@]}" /V3 /DSRCDIR="$winsrc" /DDATASIZE="$datasize" /DAPPVERSION="$VERSION" installer.nsi
 
 echo
 ls -l "$ROOT/bin/SpaceCadetPinball-Setup.exe"

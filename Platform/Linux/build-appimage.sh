@@ -17,9 +17,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 APPNAME="SpaceCadetPinball"
 
-# Single source of truth for the version: the constant the game itself reports.
-VERSION="$(sed -n 's/.*Version = "\([0-9.]*\)".*/\1/p' "$ROOT/SpaceCadetPinball/winmain.h" | head -1)"
-[ -n "$VERSION" ] || { echo "Could not read the version from winmain.h" >&2; exit 1; }
+# Single source of truth for the version: the VERSION file at the repo root.
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+[ -n "$VERSION" ] || { echo "Could not read the version from VERSION" >&2; exit 1; }
 
 BIN="$ROOT/bin"
 [ -x "$BIN/$APPNAME" ] || { echo "$BIN/$APPNAME is missing - build it first (see BUILD.md)" >&2; exit 1; }

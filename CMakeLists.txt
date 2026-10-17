@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.0...3.5)
-project(SpaceCadetPinball)
+
+# Version: the VERSION file at the repo root is the single source of truth for
+# the release number. Everything else (game, packages, installer, release tag)
+# derives from it - see scripts/bump-version.sh for bumping a patch release.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" SPACECADETPINBALL_VERSION
+	LIMIT_COUNT 1)
+string(STRIP "${SPACECADETPINBALL_VERSION}" SPACECADETPINBALL_VERSION)
+if(NOT SPACECADETPINBALL_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+	message(FATAL_ERROR "VERSION file must contain a version like X.Y.Z, got: "
+		"'${SPACECADETPINBALL_VERSION}'")
+endif()
+
+project(SpaceCadetPinball VERSION ${SPACECADETPINBALL_VERSION})
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -222,6 +234,10 @@ endif()
 
 target_link_libraries(SpaceCadetPinball glfw Vulkan::Vulkan)
 
+# Bake the release version into the binary (winmain::Version reads this).
+target_compile_definitions(SpaceCadetPinball PRIVATE
+	SCP_VERSION="${PROJECT_VERSION}")
+
 # Enable MIDI music when FluidSynth is available, otherwise the stub is used.
 if(FLUIDSYNTH_INCLUDE_DIR AND FLUIDSYNTH_LIBRARY)
     target_include_directories(SpaceCadetPinball PRIVATE ${FLUIDSYNTH_INCLUDE_DIR})
@@ -257,14 +273,7 @@ if(UNIX AND NOT APPLE)
 	endforeach(S)
 endif()
 
-# Version: single source of truth is the constant the game reports.
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball/winmain.h" _scp_winmain_h)
-string(REGEX MATCH "Version = \"([0-9.]+)\"" _scp_ver_match "${_scp_winmain_h}")
-set(SPACECADETPINBALL_VERSION "${CMAKE_MATCH_1}")
-if(NOT SPACECADETPINBALL_VERSION)
-	set(SPACECADETPINBALL_VERSION "2.2.1")
-endif()
-
+# Version: see the VERSION file at the repo root (single source of truth).
 # Packaging: the binary plus desktop integration. Game data is provided by the
 # user (it is copyrighted by Microsoft and cannot be redistributed).
 set(CPACK_PACKAGE_NAME "SpaceCadetPinball")

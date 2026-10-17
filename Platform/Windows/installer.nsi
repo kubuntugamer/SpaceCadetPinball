@@ -5,7 +5,11 @@
 ; present, a General MIDI SoundFont.
 ;
 ;   cd Platform\Windows
-;   makensis installer.nsi
+;   makensis /DAPPVERSION="$(cat ../../VERSION)" installer.nsi
+;
+; build-installer.sh does that for you; without /DAPPVERSION the version
+; falls back to 0.0.0 below. The release number lives in the VERSION file at
+; the repository root (single source of truth).
 ;
 ; On Linux the same script compiles through Wine - see build-installer.sh and
 ; BUILD.md in this folder.
@@ -19,7 +23,11 @@ Unicode true
 !include "MUI2.nsh"
 
 !define APPNAME "Space Cadet Pinball"
-!define APPVERSION "2.2.1"
+; Version comes from the VERSION file at the repo root (single source of
+; truth); build-installer.sh passes it with /DAPPVERSION=.
+!ifndef APPVERSION
+  !define APPVERSION "0.0.0"
+!endif
 !define EXENAME "SpaceCadetPinball.exe"
 !define REGKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpaceCadetPinball"
 
@@ -41,7 +49,8 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 BrandingText "${APPNAME} ${APPVERSION}"
 
-VIProductVersion "2.2.1.0"
+; Windows requires a four-component numeric file version.
+VIProductVersion "${APPVERSION}.0"
 VIAddVersionKey /LANG=1033 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=1033 "FileDescription" "${APPNAME} setup"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APPVERSION}"

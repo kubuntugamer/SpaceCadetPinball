@@ -9,6 +9,33 @@ project this is forked from.
 Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
+## [2.2.3] - 2026-10-17
+
+### Added
+
+* Self-update. The game checks the project's GitHub Releases at start-up and
+  offers a newer version when there is one; **Help → Check for Updates...**
+  runs the same check on demand. A *Check for Updates on Startup* preference
+  (Options menu, on by default) turns the automatic check off.
+* When the running binary is owned by a package manager (`.deb` or `.rpm`
+  install), the update is downloaded from the release and handed to that package
+  manager (`pkexec apt-get install`, `dpkg`, `dnf` or `rpm`) so it asks for
+  administrator rights instead of being written over. Portable builds still
+  download and launch the new version directly.
+* A single version source: the new `VERSION` file feeds the game, the CPack
+  packages, the NSIS installer, the DMG/AppImage/zip names and the release tag,
+  and `scripts/bump-version.sh` cuts a patch release (bumps the version and
+  starts the changelog and AppStream entries in one command).
+
+### Fixed
+
+* Bumpers, drop targets and holes made no sound when hit: their collision
+  sound effect IDs were never initialised. (Flippers were unaffected.)
+* The macOS release job now builds on `macos-14` as arm64 and installs its own
+  Homebrew dependencies, so it runs again on current runners.
+* The Windows installer and the vcpkg manifest reported the previous release's
+  version; both are now derived from `VERSION`.
+
 ## [2.2.2] - 2026-10-16
 
 ### Added

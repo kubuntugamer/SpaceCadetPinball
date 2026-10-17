@@ -194,11 +194,34 @@ that used SDL2 (2.1.0 and older). Bind them again in the `F8` dialog.
 | `SpaceCadetPinball/` | the game source, plus vendored Dear ImGui and miniaudio |
 | `Platform/Linux/`, `Platform/macOS/`, `Platform/Windows/` | packaging and build notes per platform |
 | `BuildForWindows.ps1`, `build-mac-app.sh` | release packagers |
+| `VERSION` | the release version - single source of truth for every build script |
+| `scripts/bump-version.sh` | bumps `VERSION` and starts the changelog/AppStream entry |
 | `mingwcc.cmake` | mingw-w64 toolchain file for cross-compiling |
 | `Doc/`, `Screenshots/` | decompilation notes and images |
 | `bin/` | build output and your game data (ignored by git) |
 
 `CHANGELOG.md` lists release notes.
+
+## Cutting a release
+
+The version lives in one place, the `VERSION` file. CMake bakes it into the
+game (`SCP_VERSION`) and into the CPack packages, and every packaging script
+(APPImage, DMG, portable zip, NSIS installer) reads it directly, so a wrong
+version cannot appear in one artifact and not another.
+
+```bash
+./scripts/bump-version.sh patch     # 2.2.2 -> 2.2.3
+git commit -am 'Bump version to 2.2.3'
+git push origin master
+git tag Release_2.2.3
+git push origin Release_2.2.3       # triggers the release build
+```
+
+`bump-version.sh` takes `patch`, `minor`, `major` or an explicit `X.Y.Z`, adds
+the matching entries to `CHANGELOG.md` and
+`Platform/Linux/SpaceCadetPinball.metainfo.xml` for you to fill in, and accepts
+`--dry-run` to preview. Pushing a `Release_*` tag builds the AppImage, `.deb`,
+`.rpm`, archives, DMG and Windows zips and publishes them as a GitHub Release.
 
 ## Provenance
 

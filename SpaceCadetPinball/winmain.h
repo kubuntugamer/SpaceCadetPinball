@@ -64,7 +64,13 @@ class winmain
 	using TimePoint = std::chrono::time_point<Clock>;
 
 public:
-	static constexpr const char* Version = "2.2.2";
+	// SCP_VERSION is defined by CMake from the VERSION file at the repo root,
+	// which is the single source of truth for the release number. The fallback
+	// keeps non-CMake (IDE) builds compiling; it never ships.
+#ifndef SCP_VERSION
+#define SCP_VERSION "0.0.0"
+#endif
+	static constexpr const char* Version = SCP_VERSION;
 	static bool single_step;
 	static GLFWwindow* MainWindow;
 	static ImGuiIO* ImIO;

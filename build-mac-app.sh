@@ -11,7 +11,9 @@
 set -xe
 
 app_name='SpaceCadetPinball'
-sw_version='2.2.2'
+# Single source of truth for the version: the VERSION file at the repo root.
+sw_version="$(tr -d '[:space:]' < "$(dirname "$0")/VERSION")"
+[ -n "$sw_version" ] || { echo "Could not read the version from VERSION" >&2; exit 1; }
 dmg_name="${app_name}-${sw_version}-mac.dmg"
 
 brew_prefix=''

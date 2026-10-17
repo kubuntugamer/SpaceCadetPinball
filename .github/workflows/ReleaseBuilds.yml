@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag / release name (e.g. v2.2.2). Leave empty to build only."
+        description: "Git tag / release name. Leave empty to use Release_<VERSION>."
         required: false
-        default: "Release_2.2.2"
+        default: ""
       create_release:
         description: "Create a GitHub Release from the built artifacts"
         type: boolean
@@ -92,6 +92,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Tag comes from the push (Release_*), or the manual input; if the input is
+      # empty, it falls back to Release_<VERSION> so the VERSION file stays the
+      # single source of truth.
+      - name: Resolve tag name
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="Release_$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "release tag: ${tag}"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -101,8 +118,8 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
-          name: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
           files: artifacts/**/*
           generate_release_notes: true
           draft: false

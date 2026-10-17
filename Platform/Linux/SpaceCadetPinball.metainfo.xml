@@ -28,6 +28,17 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.3" date="2026-10-17">
+            <description>
+                <p>Self-update release.</p>
+                <p>Main highlights:</p>
+                <ul>
+                    <li>The game checks for a newer version at start-up and installs it. On <code>.deb</code> and <code>.rpm</code> installs the package manager does the install and asks for administrator rights; portable builds download and run the new version.</li>
+                    <li>One release number for everything: the game, packages, installer, archive names and the tag all come from a single <code>VERSION</code> file.</li>
+                    <li>Bumpers, targets and holes made no sound when hit.</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.2.2" date="2026-10-16">
             <description>
                 <p>Packaging release (native packages).</p>
