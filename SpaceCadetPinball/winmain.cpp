@@ -255,7 +255,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		// enough to lift the lights off the backdrop without washing out the
 		// sprites. Sparkle is masked by luminance, so it only glints on the
 		// lit parts of the table rather than the whole frame.
-		vkrender::set_effects(0.35f, 0.6f);
+		vkrender::set_effects(0.6f, 1.0f, 0.25, ImVec2(0.5f, 0.55f));
 
 		// ImGui platform backend. We install GLFW callbacks ourselves (above)
 		// and forward events to these backend functions, so ImGui must not

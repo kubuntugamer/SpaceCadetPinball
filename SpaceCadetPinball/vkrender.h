@@ -45,7 +45,7 @@ namespace vkrender
 
 	// Sets the post-processing effect intensities. Both are clamped to >= 0;
 	// 0 disables the effect (bloom then falls back to a plain blit).
-	void set_effects(float bloomIntensity, float sparkleAmount);
+	void set_effects(float bloomIntensity, float sparkleAmount, float ballRadius, ImVec2 ballCenter);
 
 	// Framebuffer (drawable) size in pixels.
 	void get_drawable_size(int* width, int* height);

@@ -145,6 +145,9 @@ namespace
 		float bloomIntensity = 0.0f;
 		float sparkleAmount = 0.0f;
 		float timeSeconds = 0.0f;
+        float ballRadius = 0.0f;
+        float ballCenterX = 0.0f;
+        float ballCenterY = 0.0f;
 
 		// Debug frame dump (enabled with the PB_DUMP environment variable). Writes
 		// the offscreen scene and bloom images to PPM files so the post effects can
@@ -1576,9 +1579,12 @@ namespace vkrender
 			vkDeviceWaitIdle(g.device);
 	}
 
-	void set_effects(float bloomIntensity, float sparkleAmount)
+	void set_effects(float bloomIntensity, float sparkleAmount, float ballRadius, ImVec2 ballCenter)
 	{
 		g.bloomIntensity = bloomIntensity > 0.0f ? bloomIntensity : 0.0f;
+    g.ballRadius = ballRadius;
+    g.ballCenterX = ballCenter.x;
+    g.ballCenterY = ballCenter.y;
 		g.sparkleAmount = sparkleAmount > 0.0f ? sparkleAmount : 0.0f;
 	}
 
