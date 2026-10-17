@@ -11,20 +11,15 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#include <io.h>      // MSVC's _access/_unlink live here, not in <unistd.h>
+#include <io.h>       // MSVC's _unlink lives here, not in <unistd.h>
 #define POPEN _popen
 #define PCLOSE _pclose
 #define SCP_UNLINK _unlink
-// MSVC's _access() has no execute bit, so mode 0 asks whether the file exists.
-// Like POSIX access(), it does not search PATH - which is what the pkexec
-// probe in do_install() relies on.
-#define SCP_ACCESS_EXISTS(p) _access((p), 0)
 #else
-#include <unistd.h>  // readlink(), access(), unlink(), X_OK
+#include <unistd.h>   // readlink() in exe_path(), unlink() in SCP_UNLINK
 #define POPEN popen
 #define PCLOSE pclose
 #define SCP_UNLINK unlink
-#define SCP_ACCESS_EXISTS(p) access((p), X_OK)
 #endif
 
 namespace {
@@ -146,6 +141,105 @@ std::string temp_dir() {
 #endif
 }
 
+bool ends_with(const std::string& s, const std::string& suffix) {
+	return s.size() >= suffix.size() &&
+	       s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// Single-quote a value so a shell takes it verbatim, whatever it contains.
+std::string shell_quote(const std::string& s) {
+	std::string out = "'";
+	for (char c : s) {
+		if (c == '\'') out += "'\\''";
+		else out += c;
+	}
+	return out + "'";
+}
+
+// Absolute path of the running executable, or "" when it cannot be resolved.
+std::string exe_path() {
+#ifdef _WIN32
+	char buf[MAX_PATH];
+	DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+	return n ? std::string(buf, n) : std::string();
+#else
+	char buf[4096];
+	auto len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+	if (len <= 0) return std::string();
+	buf[len] = '\0';
+	return std::string(buf);
+#endif
+}
+
+// Which package manager owns this install, if any.
+enum class PkgKind { None, Deb, Rpm };
+
+// Resolved once per process: it forks two commands and the answer cannot
+// change while the game is running. /proc/self/exe does not exist on macOS, so
+// exe_path() comes back empty there and the answer is None - correct, since
+// macOS installs arrive as a .dmg and update through the portable path.
+PkgKind pkg_kind() {
+#ifdef _WIN32
+	return PkgKind::None;
+#else
+	static const PkgKind kind = [] {
+		std::string exe = exe_path();
+		if (exe.empty()) return PkgKind::None;
+		if (system(("dpkg -S " + shell_quote(exe) + " >/dev/null 2>&1").c_str()) == 0)
+			return PkgKind::Deb;
+		if (system(("rpm -qf " + shell_quote(exe) + " >/dev/null 2>&1").c_str()) == 0)
+			return PkgKind::Rpm;
+		return PkgKind::None;
+	}();
+	return kind;
+#endif
+}
+
+// First release asset with the given extension, or "".
+std::string find_asset(const std::vector<std::string>& urls, const std::string& ext) {
+	for (const auto& u : urls)
+		if (ends_with(u, ext)) return u;
+	return "";
+}
+
+// Is `name` runnable? access() resolves relative to the working directory and
+// never searches PATH, so ask the shell instead.
+bool have_command(const char* name) {
+#ifdef _WIN32
+	(void)name;
+	return false;   // no polkit/apt/dnf on Windows
+#else
+	return system((std::string("command -v ") + name + " >/dev/null 2>&1").c_str()) == 0;
+#endif
+}
+
+void set_error(const std::string& msg) {
+	std::lock_guard<std::mutex> lk(g_mutex);
+	g_status = update::Status::Error;
+	g_error = msg;
+	g_installing = false;
+}
+
+// Runs the package manager over `file`, returns 0 on success.
+//
+// Exactly one attempt is made to gain administrator rights: offering a second
+// polkit prompt after the user dismissed the first would be hostile. If that
+// fails, or no helper exists, the plain install runs - it succeeds when the
+// game already has the privileges, otherwise it fails fast without prompting.
+int install_package(PkgKind kind, const std::string& file) {
+	const std::string f = shell_quote(file);
+	const bool rpm = kind == PkgKind::Rpm;
+	const std::string manager = rpm ? "dnf" : "apt-get";
+	const std::string plain = rpm ? ("rpm -i " + f) : ("dpkg -i " + f);
+
+	std::string admin;
+	if (have_command("pkexec")) admin = "pkexec " + manager + " install -y " + f;
+	else if (have_command("sudo")) admin = "sudo " + manager + " install -y " + f;
+
+	if (!admin.empty() && system(admin.c_str()) == 0) return 0;
+	return system(plain.c_str()) == 0 ? 0 : 1;
+}
+
 void do_check() {
 	{
 		std::lock_guard<std::mutex> lk(g_mutex);
@@ -173,12 +267,22 @@ void do_check() {
 	auto urls = extract_all(json, "browser_download_url");
 	std::string asset = pick_asset(urls);
 
+	// A package-managed binary updates through dpkg/dnf rather than the
+	// portable asset above, so it needs the matching package from this release.
+	std::string pkg;
+	switch (pkg_kind()) {
+	case PkgKind::Deb: pkg = find_asset(urls, ".deb"); break;
+	case PkgKind::Rpm: pkg = find_asset(urls, ".rpm"); break;
+	default: break;
+	}
+
 	std::string remote_ver = strip_prefix(tag);
 
 	update::ReleaseInfo info;
 	info.version = remote_ver;
 	info.release_url = html.empty() ? ("https://github.com/kubuntugamer/SpaceCadetPinball/releases/tag/" + tag) : html;
 	info.download_url = asset;
+	info.package_url = pkg;
 	info.notes = body;
 
 	bool newer = !remote_ver.empty() && is_newer(remote_ver, winmain::Version);
@@ -302,20 +406,7 @@ void CheckOnStartup() {
 
 
 bool IsPackageManaged() {
-#ifdef _WIN32
-    return false;
-#else
-    char buf[4096];
-    auto len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len <= 0) return false;
-    buf[len] = 0;
-    std::string exe(buf);
-    std::string cmd = "dpkg -S " + exe + " >/dev/null 2>&1";
-    if (system(cmd.c_str()) == 0) return true;
-    cmd = "rpm -qf " + exe + " >/dev/null 2>&1";
-    if (system(cmd.c_str()) == 0) return true;
-    return false;
-#endif
+	return pkg_kind() != PkgKind::None;
 }
 
 void DownloadAsync() {
@@ -370,25 +461,54 @@ void Render() {
 
 	if (ImGui::BeginPopupModal("Update Available", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		const auto& info = GetInfo();
-		ImGui::Text("A new version is available: %s", info.version.c_str());
-		ImGui::Text("Current version: %s", winmain::Version);
-		ImGui::Separator();
-		if (!info.notes.empty()) {
-			ImGui::TextWrapped("%s", info.notes.c_str());
+
+		if (st == Status::Installed) {
+			ImGui::Text("Update %s installed.", info.version.c_str());
+			ImGui::TextWrapped("Restart the game to finish applying it.");
 			ImGui::Separator();
-		}
-		if (g_downloading) {
-			ImGui::Text("Downloading... %.0f%%", GetProgress() * 100.0f);
+			if (ImGui::Button("Restart Now")) {
+				ImGui::CloseCurrentPopup();
+				popup_open = false;
+				Reset();
+				winmain::Restart();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Later")) {
+				Reset();
+				ImGui::CloseCurrentPopup();
+				popup_open = false;
+			}
+		} else if (st == Status::Installing || g_downloading) {
+			// Shown for the whole download. The work runs on a background
+			// thread and never holds g_mutex while blocked, so the game keeps
+			// rendering - including while polkit waits for a password.
+			ImGui::Text("Updating to %s...", info.version.c_str());
+			ImGui::ProgressBar(GetProgress(), ImVec2(320.0f, 0.0f));
+			ImGui::TextUnformatted(GetProgress() < 0.5f ? "Downloading package..."
+			                                            : "Installing package...");
 		} else {
+			ImGui::Text("A new version is available: %s", info.version.c_str());
+			ImGui::Text("Current version: %s", winmain::Version);
+			ImGui::Separator();
+			if (!info.notes.empty()) {
+				ImGui::TextWrapped("%s", info.notes.c_str());
+				ImGui::Separator();
+			}
+			if (!info.package_url.empty()) {
+				// Package-managed install: dpkg/dnf with administrator rights.
+				// The portable asset stays reachable alongside it.
+				if (ImGui::Button("Install Update")) InstallAsync();
+				ImGui::SameLine();
+			}
 			if (ImGui::Button("Download Update")) DownloadAsync();
 			ImGui::SameLine();
 			if (ImGui::Button("Open Release Page")) OpenReleasePage();
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Later")) {
-			Reset();
-			ImGui::CloseCurrentPopup();
-			popup_open = false;
+			ImGui::SameLine();
+			if (ImGui::Button("Later")) {
+				Reset();
+				ImGui::CloseCurrentPopup();
+				popup_open = false;
+			}
 		}
 		ImGui::EndPopup();
 	}
@@ -414,87 +534,77 @@ void Render() {
 
 
 void do_install() {
-    std::lock_guard<std::mutex> lk(g_mutex);
-    g_status = update::Status::Installing;
-    g_installing = true;
-    g_progress = 0.0f;
-    g_installed = false;
-    g_error.clear();
+	// Nothing below may run under g_mutex: the download can take minutes and the
+	// package manager blocks on the polkit prompt, which the user may take even
+	// longer over. Render() calls GetStatus()/GetProgress() every frame, so
+	// holding the lock across either would freeze the entire game.
+	update::ReleaseInfo info;
+	{
+		std::lock_guard<std::mutex> lk(g_mutex);
+		info = g_info;
+		g_status = update::Status::Installing;
+		g_installing = true;
+		g_progress = 0.0f;
+		g_installed = false;
+		g_error.clear();
+	}
 
-    // Use the package info from the latest check
-    const auto& info = g_info;
-    if (info.download_url.empty() && info.package_url.empty()) {
-        g_status = update::Status::Error;
-        g_error = "No update information available. Check for updates first.";
-        g_installing = false;
-        return;
-    }
+	const PkgKind kind = pkg_kind();
+	const std::string ext = kind == PkgKind::Rpm ? ".rpm" : ".deb";
 
-    std::string deb_url = info.package_url;
-    if (deb_url.empty()) {
-        deb_url = info.download_url;
-    }
+	// Prefer the package this install owns; fall back to the portable asset so
+	// the message can tell "no package for us" from "nothing at all".
+	const std::string url = info.package_url.empty() ? info.download_url : info.package_url;
+	if (url.empty()) {
+		set_error("No update information available. Check for updates first.");
+		return;
+	}
+	if (!ends_with(url, ext)) {
+		set_error("This release has no " + ext + " package to install.");
+		return;
+	}
 
-    if (deb_url.empty() || deb_url.find(".deb") == std::string::npos) {
-        g_status = update::Status::Error;
-        g_error = "No .deb package available for this platform.";
-        g_installing = false;
-        return;
-    }
+	const std::string name = url.substr(url.find_last_of('/') + 1);
+	const std::string dest = temp_dir() + name;
+	run_command("curl -s -L -m 300 -o " + shell_quote(dest) + " " + shell_quote(url));
 
-    // Download the .deb file
-    std::string name = deb_url.substr(deb_url.find_last_of('/') + 1);
-    std::string tmp_dir = temp_dir();
-    std::string dest = tmp_dir + name;
-    std::string dl_cmd = "curl -s -L -m 300 -o "" + dest + "" "" + deb_url + """;
-    run_command(dl_cmd);
+	bool ok = false;
+	if (FILE* f = fopen(dest.c_str(), "rb")) {
+		fseek(f, 0, SEEK_END);
+		ok = ftell(f) > 0;
+		fclose(f);
+	}
+	if (!ok) {
+		SCP_UNLINK(dest.c_str());
+		set_error("Failed to download " + name + ".");
+		return;
+	}
+	{
+		std::lock_guard<std::mutex> lk(g_mutex);
+		g_progress = 0.5f;
+	}
 
-    // Verify download
-    FILE* f = fopen(dest.c_str(), "rb");
-    bool ok = f != nullptr;
-    if (f) { fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f); if (sz <= 0) ok = false; }
+	const int rc = install_package(kind, dest);
+	SCP_UNLINK(dest.c_str());
 
-    if (!ok) {
-        g_status = update::Status::Error;
-        g_error = "Failed to download .deb file.";
-        g_installing = false;
-        return;
-    }
+	if (rc != 0) {
+		set_error("Could not install " + name + ". Get it from the release page instead.");
+		return;
+	}
 
-    // Install via package manager with admin privileges
-    // Try pkexec first (PolicyKit), fall back to dpkg -i
-    std::string install_cmd;
-    if (SCP_ACCESS_EXISTS("pkexec")) {
-        install_cmd = "pkexec apt-get update && pkexec apt-get install -y "" + dest + """;
-    } else {
-        install_cmd = "dpkg -i "" + dest + """;
-    }
+	std::lock_guard<std::mutex> lk(g_mutex);
+	g_installed = true;
+	g_progress = 1.0f;
+	g_status = update::Status::Installed;
+	g_installing = false;
+	g_error.clear();
+}
 
-    int result = system(install_cmd.c_str());
-
-    if (result == 0) {
-        g_progress = 1.0f;
-        g_installed = true;
-        g_status = update::Status::Installed;
-        g_installing = false;
-        g_error = " .deb installed successfully.";
-    } else {
-        std::string fallback = "dpkg -i "" + dest + """;
-        int fallback_result = system(fallback.c_str());
-        if (fallback_result == 0) {
-            g_progress = 1.0f;
-            g_installed = true;
-            g_status = update::Status::Installed;
-            g_installing = false;
-            g_error = " .deb installed successfully via dpkg.";
-        } else {
-            g_status = update::Status::Error;
-            g_error = "Failed to install .deb package. Try: dpkg -i <file> or pkexec apt-get install -y <file>";
-            g_installing = false;
-        }
-    }
-
-    // Clean up downloaded file
-    SCP_UNLINK(dest.c_str());
+void InstallAsync() {
+	{
+		std::lock_guard<std::mutex> lk(g_mutex);
+		if (g_installing || g_downloading || g_checking) return;
+	}
+	std::thread([]() { do_install(); }).detach();
 }
 } // namespace update
