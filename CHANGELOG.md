@@ -11,6 +11,12 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.7] - 2026-10-17
+
+### Fixed
+
+* Self-update now properly restarts the game after an update is installed. The update check runs once per process launch via `CheckOnStartup()`, and the "Restart Now" button in the update popup correctly triggers `winmain::Restart()`, which sets `restart = true` to re-execute the game from the beginning. No manual quit and restart is required.
+
 ## [2.2.6] - 2026-10-17
 
 ### Changed

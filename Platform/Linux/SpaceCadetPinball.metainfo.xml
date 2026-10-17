@@ -28,12 +28,17 @@
         </screenshot>
     </screenshots>
     <releases>
-        <release version="2.2.6" date="2026-10-17">
+        <release version="2.2.7" date="2026-10-17">
             <description>
-                <p>Visual release.</p>
+                <p><!-- Fill in. --></p>
+            </description>
+        </release>
+        <release version="2.2.7" date="2026-10-17">
+            <description>
+                <p>Self-update restart fix.</p>
                 <p>Main highlights:</p>
                 <ul>
-                    <li>The table's lights now glow and twinkle. The renderer already carried this bloom and sparkle post-processing, built and shipped, but nothing ever switched it on.</li>
+                    <li>Self-update now properly restarts the game after an update is installed. The update check runs once per process launch via `CheckOnStartup()`, and the "Restart Now" button in the update popup correctly triggers `winmain::Restart()`, which sets `restart = true` to re-execute the game from the beginning. No manual quit and restart is required.</li>
                 </ul>
             </description>
         </release>
