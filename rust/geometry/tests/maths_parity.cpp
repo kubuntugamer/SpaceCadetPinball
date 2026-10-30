@@ -1,6 +1,6 @@
 // Differential test: the original C++ maths versus the Rust port.
 //
-// Build with -DSCP_BUILD_MATHS_PARITY_TEST=ON (requires SCP_USE_RUST_GEOMETRY).
+// Build with -DSCP_BUILD_PARITY_TESTS=ON (requires SCP_USE_RUST_GEOMETRY).
 // The reference implementation is maths.cpp itself, compiled here without the
 // Rust macro, so the test compares shipped code against shipped code rather than
 // a hand-copied reference. Run it after touching rust/geometry: it compares

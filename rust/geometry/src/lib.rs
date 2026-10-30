@@ -11,6 +11,8 @@
 //! keeps the two implementations bit-identical instead of merely close, which
 //! matters for a physics engine where a one-ulp change can alter a bounce.
 
+pub mod grid;
+
 /// 2D vector; matches C++ `vector2`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

@@ -3,6 +3,10 @@
 
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "grid_rust_abi.h"
+#endif
+
 
 TLine::TLine(TCollisionComponent* collCmp, char* activeFlag, unsigned int collisionGroup, float x0, float y0, float x1,
              float y1): TEdgeSegment(collCmp, activeFlag, collisionGroup)
@@ -62,6 +66,26 @@ void TLine::place_in_grid(RectF* aabb)
 	}
 
 	auto edgeMan = TTableLayer::edge_manager;
+
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Same box walk as the ray test in TEdgeManager; both run the one Rust
+	// implementation so an insertion can never disagree with a lookup.
+	RustGrid grid{
+		edgeMan->MinX,
+		edgeMan->MinY,
+		edgeMan->AdvanceX,
+		edgeMan->AdvanceY,
+		edgeMan->MaxBoxX,
+		edgeMan->MaxBoxY
+	};
+
+	int32_t boxes[256];
+	auto boxCount = scp_grid_walk_segment(&grid, X0, Y0, X1, Y1, boxes, sizeof boxes / sizeof boxes[0]);
+	for (size_t index = 0; index < boxCount; ++index)
+	{
+		edgeMan->add_edge_to_box(boxes[index] % edgeMan->MaxBoxX, boxes[index] / edgeMan->MaxBoxX, this);
+	}
+#else
 	auto xBox0 = edgeMan->box_x(X0);
 	auto yBox0 = edgeMan->box_y(Y0);
 	auto xBox1 = edgeMan->box_x(X1);
@@ -128,4 +152,5 @@ void TLine::place_in_grid(RectF* aabb)
 			edgeMan->add_edge_to_box(indexX, indexY, this);
 		}
 	}
+#endif
 }

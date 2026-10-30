@@ -4,7 +4,7 @@
 //
 // Every struct here mirrors a C++ aggregate from maths.h field for field, so the
 // shim in maths.cpp can copy whole values across the boundary with memcpy. The
-// shared header exists so the differential test (rust/geometry/tests/parity.cpp)
+// shared header exists so the differential test (rust/geometry/tests/maths_parity.cpp)
 // can call the Rust functions directly and compare them against the original C++
 // implementation.
 

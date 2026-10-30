@@ -28,10 +28,13 @@ if(SCP_USE_RUST_GEOMETRY)
     set(RUST_GEOMETRY_CARGO_ARGS build --release --manifest-path "${RUST_GEOMETRY_MANIFEST}"
         --target-dir "${RUST_GEOMETRY_TARGET_DIR}")
     set(RUST_GEOMETRY_BUILD_COMMANDS)
+    # Every crate source has to be a dependency, otherwise editing a module
+    # leaves a stale static library behind until Cargo is invoked by hand.
+    file(GLOB RUST_GEOMETRY_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/src/*.rs")
     set(RUST_GEOMETRY_DEPENDENCIES
         "${RUST_GEOMETRY_MANIFEST}"
         "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/Cargo.lock"
-        "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/src/lib.rs")
+        ${RUST_GEOMETRY_SOURCES})
     if(MSVC)
         set(RUST_GEOMETRY_LIBRARY_NAME "spacecadet_geometry.lib")
     else()
@@ -89,18 +92,22 @@ endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
 
-# Differential test for the Rust maths port: builds the original C++ maths
-# alongside the Rust one and compares results bit for bit. Off by default; CI
-# enables it so a ported function cannot drift from its reference silently.
-option(SCP_BUILD_MATHS_PARITY_TEST "Build the C++/Rust maths differential test" OFF)
-if(SCP_BUILD_MATHS_PARITY_TEST)
+# Differential tests for the Rust ports: each one builds the original C++
+# implementation alongside the Rust one and compares results bit for bit (maths)
+# or box for box (edge grid). Off by default; CI enables them so a ported routine
+# cannot drift from its reference silently.
+option(SCP_BUILD_PARITY_TESTS "Build the C++/Rust differential tests" OFF)
+if(SCP_BUILD_PARITY_TESTS)
     if(NOT SCP_USE_RUST_GEOMETRY)
-        message(FATAL_ERROR "SCP_BUILD_MATHS_PARITY_TEST requires SCP_USE_RUST_GEOMETRY")
+        message(FATAL_ERROR "SCP_BUILD_PARITY_TESTS requires SCP_USE_RUST_GEOMETRY")
     endif()
-    add_executable(maths_parity rust/geometry/tests/parity.cpp)
-    target_include_directories(maths_parity PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball")
-    add_dependencies(maths_parity spacecadet_rust_geometry)
-    target_link_libraries(maths_parity spacecadet_geometry)
+
+    foreach(parity_test maths_parity edgegrid_parity)
+        add_executable(${parity_test} rust/geometry/tests/${parity_test}.cpp)
+        target_include_directories(${parity_test} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball")
+        add_dependencies(${parity_test} spacecadet_rust_geometry)
+        target_link_libraries(${parity_test} spacecadet_geometry)
+    endforeach()
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMakeModules")

@@ -13,7 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
-| Rust migration | The maths layer (`rust/geometry`) runs in Rust; the rest of the engine remains C++ |
+| Rust migration | The maths layer and the collision-grid walk (`rust/geometry`) run in Rust; the rest of the engine remains C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -124,8 +124,10 @@ If there is no FluidSynth or no SoundFont, the game runs normally without music.
 The engine is migrating to Rust one self-contained layer at a time. The maths
 layer -- `maths.cpp`: vectors, rectangles, ray/circle and ray/line intersection,
 line construction, ramp edge search, flipper collision probing and the ball
-rebound model -- is implemented in the dependency-free crate at
-`rust/geometry`, and every build links it by default:
+rebound model -- and the edge-grid walk that both finds and files table walls
+(`TEdgeManager::FindCollisionDistance`, `TLine::place_in_grid`) are implemented
+in the dependency-free crate at `rust/geometry`, and every build links it by
+default:
 
 ```bash
 cmake -S . -B build
@@ -139,13 +141,15 @@ The original C++ implementation is kept as the reference. Pass
 `-DSCP_USE_RUST_GEOMETRY=OFF` to build it instead, which is only useful for
 debugging a suspected port regression on a machine without Rust.
 
-Every ported function is checked against its C++ original: the differential test
-compiles both implementations and compares results bit for bit over 20,000
-randomized cases, so a ported routine cannot silently drift.
+Every ported routine is checked against its C++ original: the differential tests
+compile both implementations and compare results -- bit for bit over 20,000
+randomized maths cases, box for box over 200,000 edge-grid cases -- so a ported
+routine cannot silently drift.
 
 ```bash
-cmake -S . -B build-parity -DSCP_BUILD_MATHS_PARITY_TEST=ON
-cmake --build build-parity && ./bin/maths_parity
+cmake -S . -B build-parity -DSCP_BUILD_PARITY_TESTS=ON
+cmake --build build-parity
+./bin/maths_parity && ./bin/edgegrid_parity
 ```
 
 The renderer, physics objects, input, audio, platform layers and the vendored

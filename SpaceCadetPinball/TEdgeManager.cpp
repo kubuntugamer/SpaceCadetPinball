@@ -8,6 +8,10 @@
 #include "TEdgeSegment.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "grid_rust_abi.h"
+#endif
+
 TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 {
 	Width = width;
@@ -121,6 +125,20 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 	auto distance = 1000000000.0f;
 	auto edgeIndex = 0;
 
+#ifdef SCP_USE_RUST_GEOMETRY
+	// The box walk lives in rust/geometry; only the per-box edge testing stays
+	// here, because that is where the virtual edge calls live. Visiting the same
+	// boxes in the same order keeps tie-breaking between equidistant edges intact.
+	RustGrid grid{MinX, MinY, AdvanceX, AdvanceY, MaxBoxX, MaxBoxY};
+	RustGridRay rustRay{ray->Origin.X, ray->Origin.Y, ray->Direction.X, ray->Direction.Y, ray->MaxDistance};
+
+	int32_t boxes[256];
+	auto boxCount = scp_grid_walk_ray(&grid, &rustRay, boxes, sizeof boxes / sizeof boxes[0]);
+	for (size_t index = 0; index < boxCount; ++index)
+	{
+		edgeIndex = TestGridBox(boxes[index] % MaxBoxX, boxes[index] / MaxBoxX, &distance, edge, ray, ball, edgeIndex);
+	}
+#else
 	auto x0 = ray->Origin.X;
 	auto y0 = ray->Origin.Y;
 	auto x1 = ray->Direction.X * ray->MaxDistance + ray->Origin.X;
@@ -200,6 +218,7 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 			edgeIndex = TestGridBox(indexX, indexY, &distance, edge, ray, ball, edgeIndex);
 		}
 	}
+#endif
 
 
 	for (auto edgePtr = EdgeArray; edgeIndex > 0; --edgeIndex, ++edgePtr)

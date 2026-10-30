@@ -11,6 +11,15 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-30
+
+### Changed
+
+* The table's collision-grid walk now runs in Rust (`rust/geometry`, `grid` module). One implementation replaces the two copies of the same Bresenham traversal in C++: `TLine::place_in_grid` files a wall segment into the boxes it spans, and `TEdgeManager::FindCollisionDistance` walks the boxes a ball ray crosses. Box visit order is unchanged, so tie-breaking between equidistant edges is identical.
+* Added an `edgegrid_parity` differential test that compares the Rust walk against the pre-port C++ traversal box for box over 200,000 randomized grids and segments; `SCP_BUILD_MATHS_PARITY_TEST` became `SCP_BUILD_PARITY_TESTS` and builds both tests.
+* Cargo now rebuilds when any crate source changes, not only `lib.rs`, so editing a module can no longer leave a stale static library in the build tree.
+* The original C++ loop could spin forever once the walk overshot an endpoint box; the port stops there instead. No table geometry reaches that state, but a malformed table can no longer hang the physics step.
+
 ## [2.2.9] - 2026-10-30
 
 ### Changed
