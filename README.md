@@ -125,24 +125,27 @@ The engine is migrating to Rust one self-contained layer at a time. The maths
 layer -- `maths.cpp`: vectors, rectangles, ray/circle and ray/line intersection,
 line construction, ramp edge search, flipper collision probing and the ball
 rebound model -- is implemented in the dependency-free crate at
-`rust/geometry`. Release builds link it; plain developer builds keep using the
-C++ implementation unless you ask for the port:
+`rust/geometry`, and every build links it by default:
 
 ```bash
-cmake -S . -B build-rust -DSCP_USE_RUST_GEOMETRY=ON
-cmake --build build-rust
+cmake -S . -B build
+cmake --build build
 ```
 
 Cargo and the Rust target matching the CMake target are required. macOS universal
 builds compile both Apple targets and combine the static libraries.
+
+The original C++ implementation is kept as the reference. Pass
+`-DSCP_USE_RUST_GEOMETRY=OFF` to build it instead, which is only useful for
+debugging a suspected port regression on a machine without Rust.
 
 Every ported function is checked against its C++ original: the differential test
 compiles both implementations and compares results bit for bit over 20,000
 randomized cases, so a ported routine cannot silently drift.
 
 ```bash
-cmake -S . -B build-rust -DSCP_USE_RUST_GEOMETRY=ON -DSCP_BUILD_MATHS_PARITY_TEST=ON
-cmake --build build-rust && ./bin/maths_parity
+cmake -S . -B build-parity -DSCP_BUILD_MATHS_PARITY_TEST=ON
+cmake --build build-parity && ./bin/maths_parity
 ```
 
 The renderer, physics objects, input, audio, platform layers and the vendored
@@ -159,7 +162,7 @@ CMake yourself:
 ```powershell
 cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-  -DVCPKG_MANIFEST_FEATURES=music -DSCP_USE_RUST_GEOMETRY=ON
+  -DVCPKG_MANIFEST_FEATURES=music
 cmake --build build --config Release
 ```
 
@@ -168,9 +171,9 @@ or run `./BuildForWindows.ps1`, which builds and zips both x86 and x64 into
 Vulkan SDK is not required). `-DCMAKE_WIN32_EXECUTABLE:BOOL=1` makes a windowed
 build - without it the game opens with a console window.
 
-`BuildForWindows.ps1` enables the Rust rectangle slice and installs the matching
-MSVC Rust target; a manual Rust-enabled build needs `rustup target add
-x86_64-pc-windows-msvc` (or `i686-pc-windows-msvc` for x86) first.
+`BuildForWindows.ps1` installs the matching MSVC Rust target for you; a manual
+build needs `rustup target add x86_64-pc-windows-msvc` (or
+`i686-pc-windows-msvc` for x86) first.
 
 ### Windows installer
 
@@ -189,8 +192,10 @@ A 64-bit mingw-w64 toolchain plus GLFW/Vulkan/FluidSynth for Windows is enough;
 `mingwcc.cmake` is the toolchain file:
 
 ```bash
+rustup target add x86_64-pc-windows-gnu
 cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=mingwcc.cmake \
-  -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_BUILD_TYPE=Release \
+  -DSCP_RUST_TARGET=x86_64-pc-windows-gnu
 cmake --build build-win
 ```
 

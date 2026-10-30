@@ -15,9 +15,10 @@ project(SpaceCadetPinball VERSION ${SPACECADETPINBALL_VERSION})
 
 set(CMAKE_CXX_STANDARD 11)
 
-option(SCP_USE_RUST_GEOMETRY "Use the Rust geometry crate for rectangle operations" OFF)
+option(SCP_USE_RUST_GEOMETRY "Use the Rust maths/geometry crate instead of the C++ reference implementation" ON)
 set(SCP_RUST_TARGET "" CACHE STRING "Optional Rust target triple for the geometry crate")
 if(SCP_USE_RUST_GEOMETRY)
+    message(STATUS "Rust geometry enabled (Cargo required)")
     find_program(CARGO_EXECUTABLE cargo)
     if(NOT CARGO_EXECUTABLE)
         message(FATAL_ERROR "SCP_USE_RUST_GEOMETRY requires Cargo on PATH")
@@ -321,6 +322,8 @@ if(SCP_USE_RUST_GEOMETRY)
     add_dependencies(SpaceCadetPinball spacecadet_rust_geometry)
     target_compile_definitions(SpaceCadetPinball PRIVATE SCP_USE_RUST_GEOMETRY)
     target_link_libraries(SpaceCadetPinball spacecadet_geometry)
+else()
+    message(STATUS "Rust geometry disabled - building the C++ maths reference implementation")
 endif()
 
 # Bake the release version into the binary (winmain::Version reads this).

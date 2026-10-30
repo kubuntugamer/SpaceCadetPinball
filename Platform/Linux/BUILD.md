@@ -1,6 +1,6 @@
 # Building
 
-Install devel packages for `GLFW`, `Vulkan` and (optionally) `FluidSynth`.\
+Install devel packages for `GLFW`, `Vulkan` and (optionally) `FluidSynth`, plus Rust.\
 
 Compile with CMake; tested with GCC 10, Clang 11.\
 To cross-compile for Windows, install a 64-bit mingw toolchain plus the GLFW/Vulkan/FluidSynth devel packages, then use the `mingwcc.cmake` toolchain.
@@ -8,11 +8,14 @@ To cross-compile for Windows, install a 64-bit mingw toolchain plus the GLFW/Vul
 ```bash
 # On Debian and Ubuntu
 sudo apt install cmake build-essential ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # On Fedora
 sudo dnf install cmake ninja-build glfw-devel vulkan-loader-devel fluidsynth fluidsynth-devel g++
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Build
+# Build (the maths layer is Rust; pass -DSCP_USE_RUST_GEOMETRY=OFF to build
+# the C++ reference implementation instead)
 cmake -GNinja .
 ninja
 ```
