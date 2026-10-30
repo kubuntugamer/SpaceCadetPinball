@@ -24,7 +24,9 @@ jobs:
           sudo apt-get install -y cmake ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_GEOMETRY=ON -DSCP_BUILD_MATHS_PARITY_TEST=ON
+        # No -DSCP_USE_RUST_GEOMETRY here: the Linux job exercises the default
+        # configuration, so a broken default is caught rather than hidden.
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_BUILD_MATHS_PARITY_TEST=ON
 
       - name: Build
         run: cmake --build build
