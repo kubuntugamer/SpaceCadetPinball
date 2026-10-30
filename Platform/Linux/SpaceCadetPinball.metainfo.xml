@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.2.9" date="2026-10-30">
+            <description>
+                <p>Moves the entire maths layer into Rust in release builds: vectors, rectangles, ray/circle and ray/line intersections, flipper probing and the ball rebound model. A new differential test compares the Rust implementation against the original C++ one bit for bit across 20,000 randomized cases.</p>
+            </description>
+        </release>
         <release version="2.2.8" date="2026-10-30">
             <description>
                 <p>Introduces an opt-in Rust implementation of rectangle merging and clipping, linked into CI and release builds through a C ABI. The game engine remains predominantly C++ as migration continues in stages.</p>

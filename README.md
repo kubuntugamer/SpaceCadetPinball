@@ -13,7 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
-| Rust migration | Optional Rust rectangle-geometry slice (`rust/geometry`); the rest of the engine remains C++ |
+| Rust migration | The maths layer (`rust/geometry`) runs in Rust; the rest of the engine remains C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -121,10 +121,12 @@ If there is no FluidSynth or no SoundFont, the game runs normally without music.
 
 ## Rust migration slice
 
-The engine remains a C++ application. The rectangle enclosing-box and clipping
-operations are also implemented in the dependency-free Rust crate at
-`rust/geometry`; normal builds continue to use the C++ implementation. To build
-and link the Rust implementation into the game, use:
+The engine is migrating to Rust one self-contained layer at a time. The maths
+layer -- `maths.cpp`: vectors, rectangles, ray/circle and ray/line intersection,
+line construction, ramp edge search, flipper collision probing and the ball
+rebound model -- is implemented in the dependency-free crate at
+`rust/geometry`. Release builds link it; plain developer builds keep using the
+C++ implementation unless you ask for the port:
 
 ```bash
 cmake -S . -B build-rust -DSCP_USE_RUST_GEOMETRY=ON
@@ -132,9 +134,20 @@ cmake --build build-rust
 ```
 
 Cargo and the Rust target matching the CMake target are required. macOS universal
-builds compile both Apple targets and combine the static libraries. This is an
-incremental migration checkpoint, not a full Rust rewrite; the rest of the game
-engine and its platform integration still need to be ported.
+builds compile both Apple targets and combine the static libraries.
+
+Every ported function is checked against its C++ original: the differential test
+compiles both implementations and compares results bit for bit over 20,000
+randomized cases, so a ported routine cannot silently drift.
+
+```bash
+cmake -S . -B build-rust -DSCP_USE_RUST_GEOMETRY=ON -DSCP_BUILD_MATHS_PARITY_TEST=ON
+cmake --build build-rust && ./bin/maths_parity
+```
+
+The renderer, physics objects, input, audio, platform layers and the vendored
+ImGui/miniaudio/stb sources are still C++; that remainder is what the migration
+still has to cover.
 
 ## Building
 

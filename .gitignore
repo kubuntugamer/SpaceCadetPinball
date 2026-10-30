@@ -313,6 +313,7 @@ _deps
 build.ninja
 # Build directory
 /build
+/build-*/
 
 # Cargo build output for the Rust geometry crate
 /rust/geometry/target/

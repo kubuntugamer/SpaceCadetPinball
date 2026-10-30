@@ -88,6 +88,20 @@ endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
 
+# Differential test for the Rust maths port: builds the original C++ maths
+# alongside the Rust one and compares results bit for bit. Off by default; CI
+# enables it so a ported function cannot drift from its reference silently.
+option(SCP_BUILD_MATHS_PARITY_TEST "Build the C++/Rust maths differential test" OFF)
+if(SCP_BUILD_MATHS_PARITY_TEST)
+    if(NOT SCP_USE_RUST_GEOMETRY)
+        message(FATAL_ERROR "SCP_BUILD_MATHS_PARITY_TEST requires SCP_USE_RUST_GEOMETRY")
+    endif()
+    add_executable(maths_parity rust/geometry/tests/parity.cpp)
+    target_include_directories(maths_parity PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball")
+    add_dependencies(maths_parity spacecadet_rust_geometry)
+    target_link_libraries(maths_parity spacecadet_geometry)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMakeModules")
 
 # Link mingw libs static

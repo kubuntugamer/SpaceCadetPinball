@@ -24,10 +24,13 @@ jobs:
           sudo apt-get install -y cmake ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_GEOMETRY=ON
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_GEOMETRY=ON -DSCP_BUILD_MATHS_PARITY_TEST=ON
 
       - name: Build
         run: cmake --build build
+
+      - name: Compare Rust maths against the C++ reference
+        run: ./bin/maths_parity
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

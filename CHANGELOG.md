@@ -11,6 +11,13 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.9] - 2026-10-30
+
+### Changed
+
+* The whole maths layer (`maths.cpp`) now runs in Rust when `SCP_USE_RUST_GEOMETRY=ON`, which release builds set: vector and rectangle operations, ray/circle and ray/line intersection, line construction, the ramp edge search, flipper collision probing and the ball rebound model. The C++ implementation stays as the reference and as the default for developer builds.
+* Added a differential test (`-DSCP_BUILD_MATHS_PARITY_TEST=ON`, run by CI) that compiles the original C++ and the Rust port side by side and compares 20,000 randomized cases bit for bit. It caught a real divergence during the port: C++ resolves `sin(float)`/`cos(float)` to the `float` libm functions, while the first Rust version went through `f64` and differed by one ulp on about 5% of angles.
+
 ## [2.2.8] - 2026-10-30
 
 ### Changed

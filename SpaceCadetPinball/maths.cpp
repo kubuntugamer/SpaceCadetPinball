@@ -5,19 +5,42 @@
 #include "TFlipperEdge.h"
 
 #ifdef SCP_USE_RUST_GEOMETRY
-struct RustRectangle
-{
-	int32_t x;
-	int32_t y;
-	int32_t width;
-	int32_t height;
-};
-static_assert(sizeof(RustRectangle) == 4 * sizeof(int32_t), "Rust rectangle ABI layout changed");
+// The Rust crate at rust/geometry owns this maths layer. maths_rust_abi.h
+// declares the #[repr(C)] mirrors and the C ABI entry points; the helpers below
+// copy whole aggregates across the boundary, so the engine's data layout stays a
+// C++ concern and the Rust side never sees a C++ type.
+#include "maths_rust_abi.h"
 
-extern "C" void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second,
-	RustRectangle* output);
-extern "C" int32_t scp_geometry_rectangle_clip(const RustRectangle* first, const RustRectangle* second,
-	RustRectangle* output);
+#include <cstring>
+#include <vector>
+
+namespace
+{
+	template <typename RustType, typename CppType>
+	RustType to_rust(const CppType& value)
+	{
+		static_assert(sizeof(RustType) == sizeof(CppType), "C ABI mirror size mismatch");
+		RustType result;
+		std::memcpy(&result, &value, sizeof result);
+		return result;
+	}
+
+	template <typename CppType, typename RustType>
+	void from_rust(const RustType& value, CppType& target)
+	{
+		static_assert(sizeof(RustType) == sizeof(CppType), "C ABI mirror size mismatch");
+		std::memcpy(&target, &value, sizeof target);
+	}
+
+	template <typename CppType, typename RustType>
+	CppType cast_from_rust(const RustType& value)
+	{
+		static_assert(sizeof(RustType) == sizeof(CppType), "C ABI mirror size mismatch");
+		CppType result;
+		std::memcpy(&result, &value, sizeof result);
+		return result;
+	}
+}
 #endif
 
 void RectF::Merge(RectF aabb)
@@ -32,11 +55,11 @@ void RectF::Merge(RectF aabb)
 void maths::enclosing_box(const rectangle_type& rect1, const rectangle_type& rect2, rectangle_type& dstRect)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	const RustRectangle first{ rect1.XPosition, rect1.YPosition, rect1.Width, rect1.Height };
-	const RustRectangle second{ rect2.XPosition, rect2.YPosition, rect2.Width, rect2.Height };
+	const auto first = to_rust<RustRectangle>(rect1);
+	const auto second = to_rust<RustRectangle>(rect2);
 	RustRectangle output{};
 	scp_geometry_enclosing_box(&first, &second, &output);
-	dstRect = { output.x, output.y, output.width, output.height };
+	from_rust(output, dstRect);
 #else
 	auto xPos = rect1.XPosition, width = rect1.Width;
 	if (rect2.XPosition < rect1.XPosition)
@@ -72,13 +95,13 @@ void maths::enclosing_box(const rectangle_type& rect1, const rectangle_type& rec
 bool maths::rectangle_clip(const rectangle_type& rect1, const rectangle_type& rect2, rectangle_type* dstRect)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	const RustRectangle first{ rect1.XPosition, rect1.YPosition, rect1.Width, rect1.Height };
-	const RustRectangle second{ rect2.XPosition, rect2.YPosition, rect2.Width, rect2.Height };
+	const auto first = to_rust<RustRectangle>(rect1);
+	const auto second = to_rust<RustRectangle>(rect2);
 	RustRectangle output{};
 	if (!scp_geometry_rectangle_clip(&first, &second, dstRect ? &output : nullptr))
 		return false;
 	if (dstRect)
-		*dstRect = { output.x, output.y, output.width, output.height };
+		from_rust(output, *dstRect);
 	return true;
 #else
 	auto xEnd2 = rect2.XPosition + rect2.Width;
@@ -125,6 +148,11 @@ bool maths::rectangle_clip(const rectangle_type& rect1, const rectangle_type& re
 // Returns the distance from ray origin to the first ray-circle intersection point.
 float maths::ray_intersect_circle(const ray_type& ray, const circle_type& circle)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustRay = to_rust<RustRay>(ray);
+	const auto rustCircle = to_rust<RustCircle>(circle);
+	return scp_geometry_ray_intersect_circle(&rustRay, &rustCircle);
+#else
 	// O - ray origin
 	// D - ray direction
 	// C - circle center
@@ -147,7 +175,7 @@ float maths::ray_intersect_circle(const ray_type& ray, const circle_type& circle
 	// If ray origin is inside of the circle, then T0 is negative
 	if (LMagSq < circle.RadiusSq)
 		return Tca - sqrt(ThcSq);
-	
+
 	// No intersection if ThcSq is negative, that is if d > rad
 	if (ThcSq < 0.0f)
 		return 1000000000.0f;
@@ -157,10 +185,17 @@ float maths::ray_intersect_circle(const ray_type& ray, const circle_type& circle
 	if (T0 < 0.0f || T0 > ray.MaxDistance)
 		return 1000000000.0f;
 	return T0;
+#endif
 }
 
 float maths::normalize_2d(vector2& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto rustVector = to_rust<RustVector2>(vec);
+	const float magnitude = scp_geometry_normalize_2d(&rustVector);
+	from_rust(rustVector, vec);
+	return magnitude;
+#else
 	float mag = sqrt(vec.X * vec.X + vec.Y * vec.Y);
 	if (mag != 0.0f)
 	{
@@ -168,11 +203,17 @@ float maths::normalize_2d(vector2& vec)
 		vec.Y /= mag;
 	}
 	return mag;
+#endif
 }
 
 
 void maths::line_init(line_type& line, float x0, float y0, float x1, float y1)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto rustLine = to_rust<RustLine>(line);
+	scp_geometry_line_init(&rustLine, x0, y0, x1, y1);
+	from_rust(rustLine, line);
+#else
 	line.Origin = { x0, y0 };
 	line.End = { x1, y1 };
 	line.Direction.X = x1 - x0;
@@ -192,12 +233,22 @@ void maths::line_init(line_type& line, float x0, float y0, float x1, float y1)
 
 	line.MinCoord = std::min(lineStart, lineEnd);
 	line.MaxCoord = std::max(lineStart, lineEnd);
+#endif
 }
 
 // Returns the distance from ray origin to the ray-line segment intersection point.
 // Stores ray-line intersection point in line.RayIntersect
 float maths::ray_intersect_line(const ray_type& ray, line_type& line)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustRay = to_rust<RustRay>(ray);
+	auto rustLine = to_rust<RustLine>(line);
+	const float distance = scp_geometry_ray_intersect_line(&rustRay, &rustLine);
+	// The engine reads Line.RayIntersect after a hit, so the shim must always
+	// copy the updated line back, not only on success.
+	from_rust(rustLine, line);
+	return distance;
+#else
 	// V1 vector between ray origin and line origin
 	// V2 ray direction
 	// V3 line perpendicular clockwise
@@ -226,22 +277,41 @@ float maths::ray_intersect_line(const ray_type& ray, line_type& line)
 	}
 
 	return 1000000000.0;
+#endif
 }
 
 void maths::cross(const vector3& vec1, const vector3& vec2, vector3& dstVec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector3>(vec1);
+	const auto second = to_rust<RustVector3>(vec2);
+	RustVector3 output{};
+	scp_geometry_cross3(&first, &second, &output);
+	from_rust(output, dstVec);
+#else
 	dstVec.X = vec2.Z * vec1.Y - vec2.Y * vec1.Z;
 	dstVec.Y = vec2.X * vec1.Z - vec1.X * vec2.Z;
 	dstVec.Z = vec1.X * vec2.Y - vec2.X * vec1.Y;
+#endif
 }
 
 float maths::cross(const vector2& vec1, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector2>(vec1);
+	const auto second = to_rust<RustVector2>(vec2);
+	return scp_geometry_cross2(&first, &second);
+#else
 	return vec1.X * vec2.Y - vec1.Y * vec2.X;
+#endif
 }
 
 float maths::magnitude(const vector3& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustVector = to_rust<RustVector3>(vec);
+	return scp_geometry_magnitude(&rustVector);
+#else
 	float result;
 	auto magSq = vec.X * vec.X + vec.Y * vec.Y + vec.Z * vec.Z;
 	if (magSq == 0.0f)
@@ -249,42 +319,104 @@ float maths::magnitude(const vector3& vec)
 	else
 		result = sqrt(magSq);
 	return result;
+#endif
 }
 
 float maths::magnitudeSq(const vector2& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustVector = to_rust<RustVector2>(vec);
+	return scp_geometry_magnitude_sq(&rustVector);
+#else
 	return vec.X * vec.X + vec.Y * vec.Y;
+#endif
 }
 
 int maths::magnitudeSq(const vector2i& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustVector = to_rust<RustVector2i>(vec);
+	return scp_geometry_magnitude_sq_int(&rustVector);
+#else
 	return vec.X * vec.X + vec.Y * vec.Y;
+#endif
 }
 
 void maths::vector_add(vector2& vec1Dst, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto destination = to_rust<RustVector2>(vec1Dst);
+	const auto source = to_rust<RustVector2>(vec2);
+	scp_geometry_vector_add(&destination, &source);
+	from_rust(destination, vec1Dst);
+#else
 	vec1Dst.X += vec2.X;
 	vec1Dst.Y += vec2.Y;
+#endif
 }
 
 vector2 maths::vector_sub(const vector2& vec1, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector2>(vec1);
+	const auto second = to_rust<RustVector2>(vec2);
+	RustVector2 output{};
+	scp_geometry_vector_sub(&first, &second, &output);
+	return cast_from_rust<vector2>(output);
+#else
 	return { vec1.X - vec2.X, vec1.Y - vec2.Y };
+#endif
 }
 
 vector3 maths::vector_sub(const vector3& vec1, const vector3& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector3>(vec1);
+	const auto second = to_rust<RustVector3>(vec2);
+	RustVector3 output{};
+	scp_geometry_vector_sub3(&first, &second, &output);
+	return cast_from_rust<vector3>(output);
+#else
 	return { vec1.X - vec2.X, vec1.Y - vec2.Y, vec1.Z - vec2.Z };
+#endif
 }
 
 vector2 maths::vector_mul(const vector2& vec1, float val)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto vector = to_rust<RustVector2>(vec1);
+	RustVector2 output{};
+	scp_geometry_vector_mul(&vector, val, &output);
+	return cast_from_rust<vector2>(output);
+#else
 	return { vec1.X * val, vec1.Y * val };
+#endif
 }
 
-float maths::basic_collision(TBall* ball, vector2* nextPosition, vector2* direction, float elasticity, float smoothness,
+float maths::basic_collision(TBall* ball, vector2* nextPosition, vector2* direction, float elasticity,
+                             float smoothness,
                              float threshold, float boost)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustBallState state{};
+	state.Position.X = ball->Position.X;
+	state.Position.Y = ball->Position.Y;
+	state.Direction.X = ball->Direction.X;
+	state.Direction.Y = ball->Direction.Y;
+	state.Speed = ball->Speed;
+
+	const auto next = to_rust<RustVector2>(*nextPosition);
+	const auto normal = to_rust<RustVector2>(*direction);
+	const float reboundSpeed = scp_geometry_basic_collision(&state, &next, &normal, elasticity, smoothness,
+		threshold, boost);
+
+	ball->Position.X = state.Position.X;
+	ball->Position.Y = state.Position.Y;
+	ball->Direction.X = state.Direction.X;
+	ball->Direction.Y = state.Direction.Y;
+	ball->Speed = state.Speed;
+	return reboundSpeed;
+#else
 	ball->Position.X = nextPosition->X + direction->X * 0.0005f;
 	ball->Position.Y = nextPosition->Y + direction->Y * 0.0005f;
 
@@ -317,43 +449,95 @@ float maths::basic_collision(TBall* ball, vector2* nextPosition, vector2* direct
 		ball->Speed = normalize_2d(ball->Direction);
 	}
 	return reboundSpeed;
+#endif
 }
 
 float maths::Distance_Squared(const vector2& vec1, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector2>(vec1);
+	const auto second = to_rust<RustVector2>(vec2);
+	return scp_geometry_distance_sq(&first, &second);
+#else
 	auto dx = vec1.X - vec2.X;
 	auto dy = vec1.Y - vec2.Y;
 	return dy * dy + dx * dx;
+#endif
 }
 
 float maths::DotProduct(const vector2& vec1, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector2>(vec1);
+	const auto second = to_rust<RustVector2>(vec2);
+	return scp_geometry_dot_product(&first, &second);
+#else
 	return vec1.X * vec2.X + vec1.Y * vec2.Y;
+#endif
 }
 
 float maths::Distance(const vector2& vec1, const vector2& vec2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto first = to_rust<RustVector2>(vec1);
+	const auto second = to_rust<RustVector2>(vec2);
+	return scp_geometry_distance(&first, &second);
+#else
 	return sqrt(Distance_Squared(vec1, vec2));
+#endif
 }
 
 void maths::SinCos(float angle, float& sinOut, float& cosOut)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	scp_geometry_sin_cos(angle, &sinOut, &cosOut);
+#else
 	sinOut = sin(angle);
 	cosOut = cos(angle);
+#endif
 }
 
 void maths::RotatePt(vector2& point, float sin, float cos, const vector2& origin)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto rustPoint = to_rust<RustVector2>(point);
+	const auto rustOrigin = to_rust<RustVector2>(origin);
+	scp_geometry_rotate_point(&rustPoint, sin, cos, &rustOrigin);
+	from_rust(rustPoint, point);
+#else
 	auto xOffset = point.X - origin.X;
 	auto yOffset = point.Y - origin.Y;
 	point.X = xOffset * cos - yOffset * sin + origin.X;
 	point.Y = xOffset * sin + yOffset * cos + origin.Y;
+#endif
 }
 
 // Return the distance from ray1 origin to the intersection point with the closest flipper feature. 
 // Sets ray2 origin to intersection point, direction to collision direction
 float maths::distance_to_flipper(TFlipperEdge* flipper, const ray_type& ray1, ray_type& ray2)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto lineA = to_rust<RustLine>(flipper->LineA);
+	auto lineB = to_rust<RustLine>(flipper->LineB);
+	const auto circleBase = to_rust<RustCircle>(flipper->circlebase);
+	const auto circleT1 = to_rust<RustCircle>(flipper->circleT1);
+	const auto rustRay1 = to_rust<RustRay>(ray1);
+	RustRay rustRay2{};
+
+	const float distance = scp_geometry_distance_to_flipper(&lineA, &lineB, &circleBase, &circleT1, &rustRay1,
+		&rustRay2);
+
+	// The original writes its cached intersection points back into the flipper's
+	// lines, and only touches ray2 when something was hit.
+	from_rust(lineA, flipper->LineA);
+	from_rust(lineB, flipper->LineB);
+	if (distance < 1000000000.0f)
+	{
+		ray2.Origin = cast_from_rust<vector2>(rustRay2.Origin);
+		ray2.Direction = cast_from_rust<vector2>(rustRay2.Direction);
+	}
+	return distance;
+#else
 	auto distance = 1000000000.0f;
 	auto distanceType = FlipperIntersect::none;
 	auto newDistance = ray_intersect_line(ray1, flipper->LineA);
@@ -405,10 +589,16 @@ float maths::distance_to_flipper(TFlipperEdge* flipper, const ray_type& ray1, ra
 	}
 
 	return distance;
+#endif
 }
 
 void maths::RotateVector(vector2& vec, float angle)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto rustVector = to_rust<RustVector2>(vec);
+	scp_geometry_rotate_vector(&rustVector, angle);
+	from_rust(rustVector, vec);
+#else
 	float s = sin(angle), c = cos(angle);
 	vec.X = c * vec.X - s * vec.Y;
 	vec.Y = s * vec.X + c * vec.Y;
@@ -419,11 +609,26 @@ void maths::RotateVector(vector2& vec, float angle)
 	 */
 	// Original code rotates the point on a figure eight curve.
 	// Luckily, it is never used with angle always set to 0.
+#endif
 }
 
 void maths::find_closest_edge(ramp_plane_type* planes, int planeCount, wall_point_type* wall, vector2& lineEnd,
                               vector2& lineStart)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	std::vector<RustRampPlane> rustPlanes;
+	rustPlanes.reserve(planeCount > 0 ? planeCount : 0);
+	for (auto index = 0; index < planeCount; index++)
+		rustPlanes.push_back(to_rust<RustRampPlane>(planes[index]));
+
+	const auto rustWall = to_rust<RustWallPoint>(*wall);
+	auto rustLineEnd = to_rust<RustVector2>(lineEnd);
+	auto rustLineStart = to_rust<RustVector2>(lineStart);
+	scp_geometry_find_closest_edge(rustPlanes.data(), static_cast<int32_t>(rustPlanes.size()), &rustWall,
+		&rustLineEnd, &rustLineStart);
+	from_rust(rustLineEnd, lineEnd);
+	from_rust(rustLineStart, lineStart);
+#else
 	float distance = 1000000000.0f;
 	for (auto index = 0; index < planeCount; index++)
 	{
@@ -443,4 +648,5 @@ void maths::find_closest_edge(ramp_plane_type* planes, int planeCount, wall_poin
 			}
 		}
 	}
+#endif
 }
