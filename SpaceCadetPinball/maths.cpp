@@ -4,6 +4,21 @@
 #include "TBall.h"
 #include "TFlipperEdge.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+struct RustRectangle
+{
+	int32_t x;
+	int32_t y;
+	int32_t width;
+	int32_t height;
+};
+static_assert(sizeof(RustRectangle) == 4 * sizeof(int32_t), "Rust rectangle ABI layout changed");
+
+extern "C" void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second,
+	RustRectangle* output);
+extern "C" int32_t scp_geometry_rectangle_clip(const RustRectangle* first, const RustRectangle* second,
+	RustRectangle* output);
+#endif
 
 void RectF::Merge(RectF aabb)
 {
@@ -16,6 +31,13 @@ void RectF::Merge(RectF aabb)
 // Performs AABB merge, creating rect that is just large enough to contain both source rects.
 void maths::enclosing_box(const rectangle_type& rect1, const rectangle_type& rect2, rectangle_type& dstRect)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const RustRectangle first{ rect1.XPosition, rect1.YPosition, rect1.Width, rect1.Height };
+	const RustRectangle second{ rect2.XPosition, rect2.YPosition, rect2.Width, rect2.Height };
+	RustRectangle output{};
+	scp_geometry_enclosing_box(&first, &second, &output);
+	dstRect = { output.x, output.y, output.width, output.height };
+#else
 	auto xPos = rect1.XPosition, width = rect1.Width;
 	if (rect2.XPosition < rect1.XPosition)
 	{
@@ -42,12 +64,23 @@ void maths::enclosing_box(const rectangle_type& rect1, const rectangle_type& rec
 	dstRect.YPosition = yPos;
 	dstRect.Width = width;
 	dstRect.Height = height;
+#endif
 }
 
 // Creates rect that represents an intersection of rect1 and rect2.
 // Return true when intersection exists.
 bool maths::rectangle_clip(const rectangle_type& rect1, const rectangle_type& rect2, rectangle_type* dstRect)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const RustRectangle first{ rect1.XPosition, rect1.YPosition, rect1.Width, rect1.Height };
+	const RustRectangle second{ rect2.XPosition, rect2.YPosition, rect2.Width, rect2.Height };
+	RustRectangle output{};
+	if (!scp_geometry_rectangle_clip(&first, &second, dstRect ? &output : nullptr))
+		return false;
+	if (dstRect)
+		*dstRect = { output.x, output.y, output.width, output.height };
+	return true;
+#else
 	auto xEnd2 = rect2.XPosition + rect2.Width;
 	if (rect2.XPosition >= rect1.XPosition + rect1.Width || rect1.XPosition >= xEnd2)
 		return 0;
@@ -86,6 +119,7 @@ bool maths::rectangle_clip(const rectangle_type& rect1, const rectangle_type& re
 		dstRect->Height = height;
 	}
 	return true;
+#endif
 }
 
 // Returns the distance from ray origin to the first ray-circle intersection point.

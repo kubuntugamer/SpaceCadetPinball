@@ -13,6 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
+| Rust migration | Optional Rust rectangle-geometry slice (`rust/geometry`); the rest of the engine remains C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -82,7 +83,9 @@ The game runs natively on Wayland with GLFW 3.4 or newer; see
 Build the app bundle with `./build-mac-app.sh`; it produces
 `SpaceCadetPinball-<version>-mac.dmg`. Requires Xcode command line tools and,
 for dependencies, Homebrew (`glfw`, `vulkan-loader`, `molten-vk` and optionally
-`fluid-synth`). Upstream also has a Homebrew formula.
+`fluid-synth`). The script installs Rust's Apple target libraries for the
+selected architecture(s), including both targets for the default universal
+build. Upstream also has a Homebrew formula.
 
 ## Controls
 
@@ -116,6 +119,23 @@ in; `TimGM6mb.sf2` is about 6 MB instead of 140 MB with lower quality.
 
 If there is no FluidSynth or no SoundFont, the game runs normally without music.
 
+## Rust migration slice
+
+The engine remains a C++ application. The rectangle enclosing-box and clipping
+operations are also implemented in the dependency-free Rust crate at
+`rust/geometry`; normal builds continue to use the C++ implementation. To build
+and link the Rust implementation into the game, use:
+
+```bash
+cmake -S . -B build-rust -DSCP_USE_RUST_GEOMETRY=ON
+cmake --build build-rust
+```
+
+Cargo and the Rust target matching the CMake target are required. macOS universal
+builds compile both Apple targets and combine the static libraries. This is an
+incremental migration checkpoint, not a full Rust rewrite; the rest of the game
+engine and its platform integration still need to be ported.
+
 ## Building
 
 ### Windows (MSVC + vcpkg)
@@ -126,7 +146,7 @@ CMake yourself:
 ```powershell
 cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-  -DVCPKG_MANIFEST_FEATURES=music
+  -DVCPKG_MANIFEST_FEATURES=music -DSCP_USE_RUST_GEOMETRY=ON
 cmake --build build --config Release
 ```
 
@@ -134,6 +154,10 @@ or run `./BuildForWindows.ps1`, which builds and zips both x86 and x64 into
 `bin\SpaceCadetPinball<arch>Win.zip` (the Vulkan loader comes from vcpkg, so the
 Vulkan SDK is not required). `-DCMAKE_WIN32_EXECUTABLE:BOOL=1` makes a windowed
 build - without it the game opens with a console window.
+
+`BuildForWindows.ps1` enables the Rust rectangle slice and installs the matching
+MSVC Rust target; a manual Rust-enabled build needs `rustup target add
+x86_64-pc-windows-msvc` (or `i686-pc-windows-msvc` for x86) first.
 
 ### Windows installer
 

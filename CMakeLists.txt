@@ -15,6 +15,76 @@ project(SpaceCadetPinball VERSION ${SPACECADETPINBALL_VERSION})
 
 set(CMAKE_CXX_STANDARD 11)
 
+option(SCP_USE_RUST_GEOMETRY "Use the Rust geometry crate for rectangle operations" OFF)
+set(SCP_RUST_TARGET "" CACHE STRING "Optional Rust target triple for the geometry crate")
+if(SCP_USE_RUST_GEOMETRY)
+    find_program(CARGO_EXECUTABLE cargo)
+    if(NOT CARGO_EXECUTABLE)
+        message(FATAL_ERROR "SCP_USE_RUST_GEOMETRY requires Cargo on PATH")
+    endif()
+    set(RUST_GEOMETRY_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/Cargo.toml")
+    set(RUST_GEOMETRY_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust-target")
+    set(RUST_GEOMETRY_CARGO_ARGS build --release --manifest-path "${RUST_GEOMETRY_MANIFEST}"
+        --target-dir "${RUST_GEOMETRY_TARGET_DIR}")
+    set(RUST_GEOMETRY_BUILD_COMMANDS)
+    set(RUST_GEOMETRY_DEPENDENCIES
+        "${RUST_GEOMETRY_MANIFEST}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/Cargo.lock"
+        "${CMAKE_CURRENT_SOURCE_DIR}/rust/geometry/src/lib.rs")
+    if(MSVC)
+        set(RUST_GEOMETRY_LIBRARY_NAME "spacecadet_geometry.lib")
+    else()
+        set(RUST_GEOMETRY_LIBRARY_NAME "libspacecadet_geometry.a")
+    endif()
+    if(SCP_RUST_TARGET)
+        set(RUST_GEOMETRY_OUTPUT_DIR "${RUST_GEOMETRY_TARGET_DIR}/${SCP_RUST_TARGET}/release")
+        list(APPEND RUST_GEOMETRY_CARGO_ARGS --target "${SCP_RUST_TARGET}")
+        set(RUST_GEOMETRY_LIBRARY "${RUST_GEOMETRY_OUTPUT_DIR}/${RUST_GEOMETRY_LIBRARY_NAME}")
+        list(APPEND RUST_GEOMETRY_BUILD_COMMANDS COMMAND "${CARGO_EXECUTABLE}" ${RUST_GEOMETRY_CARGO_ARGS})
+    elseif(APPLE)
+        set(RUST_GEOMETRY_LIBRARY "${RUST_GEOMETRY_TARGET_DIR}/release/${RUST_GEOMETRY_LIBRARY_NAME}")
+        set(RUST_GEOMETRY_FAT_INPUTS)
+        if(CMAKE_OSX_ARCHITECTURES)
+            set(RUST_MACOS_ARCHITECTURES ${CMAKE_OSX_ARCHITECTURES})
+        else()
+            set(RUST_MACOS_ARCHITECTURES arm64 x86_64)
+        endif()
+        foreach(RUST_ARCH IN LISTS RUST_MACOS_ARCHITECTURES)
+            if(RUST_ARCH STREQUAL "arm64")
+                set(RUST_TARGET "aarch64-apple-darwin")
+            elseif(RUST_ARCH STREQUAL "x86_64")
+                set(RUST_TARGET "x86_64-apple-darwin")
+            else()
+                message(FATAL_ERROR "Unsupported Rust geometry macOS architecture: ${RUST_ARCH}")
+            endif()
+            list(APPEND RUST_GEOMETRY_BUILD_COMMANDS COMMAND "${CARGO_EXECUTABLE}" build --release
+                --manifest-path "${RUST_GEOMETRY_MANIFEST}" --target-dir "${RUST_GEOMETRY_TARGET_DIR}"
+                --target "${RUST_TARGET}")
+            list(APPEND RUST_GEOMETRY_FAT_INPUTS "${RUST_GEOMETRY_TARGET_DIR}/${RUST_TARGET}/release/${RUST_GEOMETRY_LIBRARY_NAME}")
+        endforeach()
+        find_program(LIPO_EXECUTABLE lipo REQUIRED)
+        list(APPEND RUST_GEOMETRY_BUILD_COMMANDS
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${RUST_GEOMETRY_TARGET_DIR}/release"
+            COMMAND "${LIPO_EXECUTABLE}" -create
+                ${RUST_GEOMETRY_FAT_INPUTS} -output "${RUST_GEOMETRY_LIBRARY}")
+    else()
+        set(RUST_GEOMETRY_LIBRARY "${RUST_GEOMETRY_TARGET_DIR}/release/${RUST_GEOMETRY_LIBRARY_NAME}")
+        list(APPEND RUST_GEOMETRY_BUILD_COMMANDS COMMAND "${CARGO_EXECUTABLE}" ${RUST_GEOMETRY_CARGO_ARGS})
+    endif()
+    add_custom_command(
+        OUTPUT "${RUST_GEOMETRY_LIBRARY}"
+        ${RUST_GEOMETRY_BUILD_COMMANDS}
+        DEPENDS
+            ${RUST_GEOMETRY_DEPENDENCIES}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Building Rust rectangle geometry"
+        VERBATIM
+    )
+    add_custom_target(spacecadet_rust_geometry DEPENDS "${RUST_GEOMETRY_LIBRARY}")
+    add_library(spacecadet_geometry STATIC IMPORTED GLOBAL)
+    set_target_properties(spacecadet_geometry PROPERTIES IMPORTED_LOCATION "${RUST_GEOMETRY_LIBRARY}")
+endif()
+
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
 
@@ -233,6 +303,11 @@ if(${CMAKE_VERSION} VERSION_GREATER "3.16.0" OR ${CMAKE_VERSION} VERSION_EQUAL "
 endif()
 
 target_link_libraries(SpaceCadetPinball glfw Vulkan::Vulkan)
+if(SCP_USE_RUST_GEOMETRY)
+    add_dependencies(SpaceCadetPinball spacecadet_rust_geometry)
+    target_compile_definitions(SpaceCadetPinball PRIVATE SCP_USE_RUST_GEOMETRY)
+    target_link_libraries(SpaceCadetPinball spacecadet_geometry)
+endif()
 
 # Bake the release version into the binary (winmain::Version reads this).
 target_compile_definitions(SpaceCadetPinball PRIVATE

@@ -39,7 +39,26 @@ cmake_arch_args=()
 if [ -n "${CMAKE_OSX_ARCHITECTURES:-}" ]; then
 	cmake_arch_args+=("-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}")
 fi
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${cmake_arch_args[@]}"
+if [ -n "${CMAKE_OSX_ARCHITECTURES:-}" ]; then
+	IFS=';' read -r -a mac_architectures <<< "$CMAKE_OSX_ARCHITECTURES"
+else
+	mac_architectures=(arm64 x86_64)
+fi
+rust_targets=()
+for rust_arch in "${mac_architectures[@]}"; do
+	case "$rust_arch" in
+		arm64) rust_targets+=(aarch64-apple-darwin) ;;
+		x86_64) rust_targets+=(x86_64-apple-darwin) ;;
+		*) echo "Unsupported macOS architecture for Rust geometry: $rust_arch" >&2; exit 1 ;;
+	esac
+done
+rustup target add "${rust_targets[@]}"
+rust_target_args=()
+if [ "${#rust_targets[@]}" -eq 1 ]; then
+	rust_target_args+=("-DSCP_RUST_TARGET=${rust_targets[0]}")
+fi
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${cmake_arch_args[@]}" \
+	-DSCP_USE_RUST_GEOMETRY=ON "${rust_target_args[@]}"
 cmake --build build
 
 mkdir -p "${app_name}.app/Contents/MacOS"

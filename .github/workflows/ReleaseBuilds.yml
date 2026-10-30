@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: brew install glfw vulkan-loader molten-vk fluid-synth dylibbundler
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - run: bash build-mac-app.sh
         env:
           CMAKE_OSX_ARCHITECTURES: arm64
@@ -41,6 +44,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Build (x86 + x64)
         shell: pwsh
@@ -57,6 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -64,7 +73,7 @@ jobs:
 
       - name: Configure and build
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_GEOMETRY=ON
           cmake --build build
 
       - name: Build packages (.deb, .rpm, archives, AppImage)

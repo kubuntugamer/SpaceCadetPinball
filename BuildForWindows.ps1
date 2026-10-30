@@ -21,7 +21,11 @@ function New-Release([string]$architecture, [string]$triplet, [string]$zipName) 
     # (Do not touch .\bin: it may hold the user's game data.)
     Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
 
-    cmake -S . -B build -A $architecture -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_MANIFEST_FEATURES=music
+    $rustTarget = if ($architecture -eq "Win32") { "i686-pc-windows-msvc" } else { "x86_64-pc-windows-msvc" }
+    rustup target add $rustTarget
+    if ($LASTEXITCODE -ne 0) { throw "Could not install Rust target $rustTarget" }
+
+    cmake -S . -B build -A $architecture -DCMAKE_WIN32_EXECUTABLE:BOOL=1 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_MANIFEST_FEATURES=music -DSCP_USE_RUST_GEOMETRY=ON "-DSCP_RUST_TARGET=$rustTarget"
     if ($LASTEXITCODE -ne 0) { throw "CMake configure failed for $architecture" }
 
     cmake --build build --config Release

@@ -11,6 +11,13 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.2.8] - 2026-10-30
+
+### Changed
+
+* Added an opt-in Rust port of rectangle merging and clipping, wired through a C ABI. Rust-backed geometry is enabled in the CI and release builds; ordinary developer builds retain the C++ implementation unless `SCP_USE_RUST_GEOMETRY=ON` is selected. The game engine remains predominantly C++; this is an incremental migration checkpoint, not a complete Rust rewrite.
+* Windows and macOS release builds now compile the Rust geometry library for their target architectures, including both slices in the universal macOS build.
+
 ## [2.2.7] - 2026-10-17
 
 ### Fixed
@@ -28,10 +35,6 @@ below concerns them.
   at zero. They are now on at a fixed, tuned strength. There is deliberately no
   new preference for this; the look is part of the game's presentation rather
   than a setting, and turning it off means rebuilding.
-
-## [2.2.6] - 2026-10-17
-
-<!-- Describe this release below, then remove this line. -->
 
 ## [2.2.5] - 2026-10-17
 

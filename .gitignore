@@ -314,6 +314,9 @@ build.ninja
 # Build directory
 /build
 
+# Cargo build output for the Rust geometry crate
+/rust/geometry/target/
+
 # Windows installer and portable packaging (see Platform/Windows/BUILD.md):
 # inputs are the user's game data and SoundFont, outputs are build artifacts.
 /SpaceCadetPinball-Setup.exe

@@ -12,13 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Rust geometry
+        run: cargo test --manifest-path rust/geometry/Cargo.toml
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_GEOMETRY=ON
 
       - name: Build
         run: cmake --build build
@@ -35,6 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Rust geometry
+        run: cargo test --manifest-path rust/geometry/Cargo.toml
+
       - name: Configure
         shell: pwsh
         run: |
@@ -47,7 +59,8 @@ jobs:
           cmake -S . -B build -A x64 `
             -DCMAKE_WIN32_EXECUTABLE:BOOL=1 `
             -DCMAKE_TOOLCHAIN_FILE="$toolchain" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DSCP_USE_RUST_GEOMETRY=ON
 
       - name: Build
         run: cmake --build build --config Release

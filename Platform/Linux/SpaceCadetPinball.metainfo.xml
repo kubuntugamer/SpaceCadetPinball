@@ -28,9 +28,9 @@
         </screenshot>
     </screenshots>
     <releases>
-        <release version="2.2.7" date="2026-10-17">
+        <release version="2.2.8" date="2026-10-30">
             <description>
-                <p><!-- Fill in. --></p>
+                <p>Introduces an opt-in Rust implementation of rectangle merging and clipping, linked into CI and release builds through a C ABI. The game engine remains predominantly C++ as migration continues in stages.</p>
             </description>
         </release>
         <release version="2.2.7" date="2026-10-17">
