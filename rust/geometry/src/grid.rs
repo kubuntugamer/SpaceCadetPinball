@@ -166,6 +166,14 @@ fn walk_boxes(grid: &Grid, x0: f32, y0: f32, x1: f32, y1: f32, output: &mut [i32
     count
 }
 
+/// Ordered box indices a ray crosses, written into `output`; returns how many.
+/// The safe entry point, used by the Rust callers and the C ABI wrapper below.
+pub fn walk_ray(grid: &Grid, ray: &GridRay, output: &mut [i32]) -> usize {
+    let x1 = ray.direction_x * ray.max_distance + ray.origin_x;
+    let y1 = ray.direction_y * ray.max_distance + ray.origin_y;
+    walk_boxes(grid, ray.origin_x, ray.origin_y, x1, y1, output)
+}
+
 /// Fill `output` with the ordered box indices a ray crosses.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn scp_grid_walk_ray(
@@ -178,11 +186,6 @@ pub unsafe extern "C" fn scp_grid_walk_ray(
     let grid = unsafe { *grid };
     let ray = unsafe { *ray };
 
-    let x0 = ray.origin_x;
-    let y0 = ray.origin_y;
-    let x1 = ray.direction_x * ray.max_distance + ray.origin_x;
-    let y1 = ray.direction_y * ray.max_distance + ray.origin_y;
-
     let buffer = if output.is_null() || capacity == 0 {
         &mut [][..]
     } else {
@@ -190,7 +193,12 @@ pub unsafe extern "C" fn scp_grid_walk_ray(
         unsafe { core::slice::from_raw_parts_mut(output, capacity) }
     };
 
-    walk_boxes(&grid, x0, y0, x1, y1, buffer)
+    walk_ray(&grid, &ray, buffer)
+}
+
+/// Ordered box indices a wall segment spans, written into `output`.
+pub fn walk_segment(grid: &Grid, x0: f32, y0: f32, x1: f32, y1: f32, output: &mut [i32]) -> usize {
+    walk_boxes(grid, x0, y0, x1, y1, output)
 }
 
 /// Fill `output` with the ordered box indices a wall segment spans.
@@ -214,7 +222,7 @@ pub unsafe extern "C" fn scp_grid_walk_segment(
         unsafe { core::slice::from_raw_parts_mut(output, capacity) }
     };
 
-    walk_boxes(&grid, x0, y0, x1, y1, buffer)
+    walk_segment(&grid, x0, y0, x1, y1, buffer)
 }
 
 #[cfg(test)]

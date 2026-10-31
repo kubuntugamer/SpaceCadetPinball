@@ -1,7 +1,10 @@
 # Object ownership design: the collision graph
 
-Status: **proposal**, not implemented. Scope: the pointer-linked collision
-object graph that issue #15 calls phase 3. The maths layer, the edge-grid walk
+Status: **slice 1 in progress** -- the Rust half is implemented in
+`rust/geometry/src/world.rs` (generational arenas, id-based grid, epoch marks,
+external-edge seam, 8 tests); the C++ side still owns behaviour and has not been
+switched over. Scope: the pointer-linked collision object graph that issue #15
+calls phase 3. The maths layer, the edge-grid walk
 and the projection are already Rust; this document decides *how the remaining
 objects get an owner* before any of them move.
 

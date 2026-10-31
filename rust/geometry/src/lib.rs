@@ -13,6 +13,7 @@
 
 pub mod grid;
 pub mod proj;
+pub mod world;
 
 /// 2D vector; matches C++ `vector2`.
 #[repr(C)]
@@ -113,7 +114,7 @@ pub struct BallState {
 }
 
 /// Returned when a ray misses. The original engine uses the same sentinel.
-const NO_INTERSECTION: f32 = 1_000_000_000.0;
+pub const NO_INTERSECTION: f32 = 1_000_000_000.0;
 
 // C++ `<cmath>` overloads these for `float` (`sqrtf`, `sinf`, `cosf`), so the
 // `f32` methods here bind to the same libm entry points and produce identical
