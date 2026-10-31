@@ -329,6 +329,15 @@ if(SCP_USE_RUST_GEOMETRY)
     add_dependencies(SpaceCadetPinball spacecadet_rust_geometry)
     target_compile_definitions(SpaceCadetPinball PRIVATE SCP_USE_RUST_GEOMETRY)
     target_link_libraries(SpaceCadetPinball spacecadet_geometry)
+    if(WIN32)
+        # The Rust static library carries its own std. The objects the linker
+        # pulls in for panic handling also reference Win32 networking, registry
+        # and file APIs, which a plain C++ link never resolves on its own.
+        target_link_libraries(SpaceCadetPinball ws2_32 ntdll userenv bcrypt advapi32 ole32 shell32)
+        if(MSVC)
+            target_link_libraries(SpaceCadetPinball synchronization)
+        endif()
+    endif()
 else()
     message(STATUS "Rust geometry disabled - building the C++ maths reference implementation")
 endif()
