@@ -291,9 +291,13 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 		{
 			if (WorldCheckMismatches++ < 20)
 			{
+				// The wall index from the DAT is what identifies the edge to a human;
+				// a pointer would only be comparable to another log line.
+				auto cppWall = cppEdge ? reinterpret_cast<uintptr_t>(cppEdge->WallValue) : 0;
+				auto worldWall = worldEdge ? reinterpret_cast<uintptr_t>(worldEdge->WallValue) : 0;
 				fprintf(stderr,
-						"SCP_WORLD_CHECK mismatch: cpp edge %p dist %.9g, world edge %p dist %.9g\n",
-						static_cast<void*>(cppEdge), cppDistance, static_cast<void*>(worldEdge), worldDistance);
+						"SCP_WORLD_CHECK mismatch: cpp wall %zu dist %.9g, world wall %zu dist %.9g\n",
+						static_cast<size_t>(cppWall), cppDistance, static_cast<size_t>(worldWall), worldDistance);
 			}
 		}
 	}
