@@ -11,6 +11,16 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-10-30
+
+### Fixed
+
+* The projection shim copied the 88-byte matrix and the projection parameters across the ABI on every call. It now refreshes a cached mirror when the projection changes (`init`/`recenter`), which a microbenchmark showed is the difference between being slower and being level with the C++ it replaced.
+
+### Notes
+
+* Measured on this machine (20M calls, release): the Rust maths and projection functions run at parity with their C++ originals, within a few nanoseconds per call. Porting so far is about safety and a testable boundary, not raw speed; anyone expecting a framerate win from rewriting the remaining layers should not count on one.
+
 ## [2.4.0] - 2026-10-30
 
 ### Changed

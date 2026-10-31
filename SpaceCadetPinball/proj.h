@@ -30,6 +30,10 @@ public:
 	static void recenter(float centerX, float centerY);
 	static uint16_t NormalizeDepth(float depth);
 private:
+	// Pushes the current projection state to the Rust port; called from init and
+	// recenter, never per projection.
+	static void refresh_rust_state();
+
 	static mat4_row_major matrix;
 	static float d_, centerx, centery;
 	static float zscaler, zmin, zmax;

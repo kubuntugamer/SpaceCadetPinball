@@ -9,6 +9,20 @@ mat4_row_major proj::matrix;
 float proj::d_, proj::centerx, proj::centery;
 float proj::zscaler, proj::zmin, proj::zmax;
 
+#ifdef SCP_USE_RUST_GEOMETRY
+static_assert(sizeof(RustMat4) == sizeof(mat4_row_major), "Projection matrix ABI mirror size mismatch");
+static_assert(sizeof(RustVector4) == sizeof(vector_type4), "Projection row ABI mirror size mismatch");
+static_assert(sizeof(RustVector2i) == sizeof(vector2i), "Projection point ABI mirror size mismatch");
+static_assert(sizeof(RustVector3) == sizeof(vector3), "Projection vector ABI mirror size mismatch");
+
+// Mirror of the state the Rust functions read, refreshed whenever the engine
+// changes its projection (init/recenter). Copying it per call instead made the
+// port measurably slower than the C++ it replaces: the matrix alone is 88 bytes
+// and the projection runs once per sprite per frame.
+static RustMat4 rust_matrix{};
+static RustProjectionParams rust_params{};
+#endif
+
 void proj::init(float* mat4x3, float d, float centerX, float centerY, float zMin, float zScaler)
 {
 	memcpy(&matrix, mat4x3, sizeof(float) * 4 * 3);
@@ -25,21 +39,22 @@ void proj::init(float* mat4x3, float d, float centerX, float centerY, float zMin
 	zscaler = zScaler;
 	zmin = zMin;
 	zmax = static_cast<float>(0xffFFffFF) / zScaler + zMin;
+
+	refresh_rust_state();
 }
 
+void proj::refresh_rust_state()
+{
 #ifdef SCP_USE_RUST_GEOMETRY
-static_assert(sizeof(RustMat4) == sizeof(mat4_row_major), "Projection matrix ABI mirror size mismatch");
-static_assert(sizeof(RustVector4) == sizeof(vector_type4), "Projection row ABI mirror size mismatch");
-static_assert(sizeof(RustVector2i) == sizeof(vector2i), "Projection point ABI mirror size mismatch");
-static_assert(sizeof(RustVector3) == sizeof(vector3), "Projection vector ABI mirror size mismatch");
-
-// The projection state stays in these statics; each Rust call receives a copy, so
-// the boundary has no shared mutable state. These helpers are declared here (and
-// not in proj.h) so the private statics stay private.
-#define SCP_PROJ_RUST_STATE()                                                                                      \
-	const RustMat4 rustMatrix = *reinterpret_cast<const RustMat4*>(&matrix);                                        \
-	const RustProjectionParams rustParams{d_, centerx, centery, zscaler, zmin, zmax}
+	memcpy(&rust_matrix, &matrix, sizeof rust_matrix);
+	rust_params.D = d_;
+	rust_params.CenterX = centerx;
+	rust_params.CenterY = centery;
+	rust_params.ZScaler = zscaler;
+	rust_params.ZMin = zmin;
+	rust_params.ZMax = zmax;
 #endif
+}
 
 vector3 proj::matrix_vector_multiply(const mat4_row_major& mat, const vector3& vec)
 {
@@ -61,9 +76,8 @@ vector3 proj::matrix_vector_multiply(const mat4_row_major& mat, const vector3& v
 float proj::z_distance(const vector3& vec)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	SCP_PROJ_RUST_STATE();
 	const RustVector3 rustVec{vec.X, vec.Y, vec.Z};
-	return scp_proj_z_distance(&rustMatrix, &rustVec);
+	return scp_proj_z_distance(&rust_matrix, &rustVec);
 #else
 	auto projVec = matrix_vector_multiply(matrix, vec);
 	return maths::magnitude(projVec);
@@ -79,9 +93,8 @@ vector2i proj::xform_to_2d(const vector2& vec)
 vector3 proj::ReverseXForm(const vector2i& vec)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	SCP_PROJ_RUST_STATE();
 	const RustVector2i rustVec{vec.X, vec.Y};
-	const auto result = scp_proj_reverse_xform(&rustMatrix, &rustParams, &rustVec);
+	const auto result = scp_proj_reverse_xform(&rust_matrix, &rust_params, &rustVec);
 	return vector3{result.X, result.Y, result.Z};
 #else
 	// Pinball perspective projection matrix, the same for all tables resolutions:
@@ -120,10 +133,9 @@ vector3 proj::ReverseXForm(const vector2i& vec)
 vector2i proj::xform_to_2d(const vector3& vec)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	SCP_PROJ_RUST_STATE();
 	const RustVector3 rustVec{vec.X, vec.Y, vec.Z};
 	RustVector2i result{};
-	scp_proj_xform_to_2d(&rustMatrix, &rustParams, &rustVec, &result);
+	scp_proj_xform_to_2d(&rust_matrix, &rust_params, &rustVec, &result);
 	return vector2i{result.X, result.Y};
 #else
 	float projCoef;
@@ -145,13 +157,13 @@ void proj::recenter(float centerX, float centerY)
 {
 	centerx = centerX;
 	centery = centerY;
+	refresh_rust_state();
 }
 
 uint16_t proj::NormalizeDepth(float depth)
 {
 #ifdef SCP_USE_RUST_GEOMETRY
-	const RustProjectionParams rustParams{d_, centerx, centery, zscaler, zmin, zmax};
-	return scp_proj_normalize_depth(&rustParams, depth);
+	return scp_proj_normalize_depth(&rust_params, depth);
 #else
 	uint16_t result = 0;
 	if (depth >= zmin)

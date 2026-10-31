@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.4.1" date="2026-10-30">
+            <description>
+                <p>Caches the projection state across the Rust boundary instead of copying the matrix on every call.</p>
+            </description>
+        </release>
         <release version="2.4.0" date="2026-10-30">
             <description>
                 <p>Moves the projection into Rust: matrix multiply, depth, the 3D-to-2D sprite transform, the reverse transform and z-buffer depth normalization. Completes the engine's math kernel in Rust, guarded by a differential test over 200,000 randomized cases.</p>
