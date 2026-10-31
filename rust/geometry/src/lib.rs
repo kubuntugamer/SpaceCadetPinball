@@ -14,6 +14,7 @@
 pub mod grid;
 pub mod proj;
 pub mod world;
+pub mod world_abi;
 
 /// 2D vector; matches C++ `vector2`.
 #[repr(C)]

@@ -43,6 +43,16 @@ pub struct Id<T> {
 }
 
 impl<T> Id<T> {
+    /// Rebuilds an id from the two halves the C ABI carries in a `u64`.
+    pub fn from_parts(index: u32, generation: u32) -> Self {
+        Self::new(index, generation)
+    }
+
+    /// The two halves, packed for a `u64` return value.
+    pub fn into_parts(self) -> (u32, u32) {
+        (self.index, self.generation)
+    }
+
     fn new(index: u32, generation: u32) -> Self {
         Self {
             index,
