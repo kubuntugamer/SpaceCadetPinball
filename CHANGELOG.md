@@ -13,11 +13,13 @@ below concerns them.
 
 ### Changed
 
-* The Rust substep loop is now the default; `SCP_RUST_STEPPER=0` runs the original C++ loop instead, from the same binary.
+* The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
+
+## [2.6.4] - 2026-10-31
 
 ### Changed
 
-* The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
+* The Rust substep loop is now the default; `SCP_RUST_STEPPER=0` runs the original C++ loop instead, from the same binary.
 
 ## [2.6.3] - 2026-10-31
 

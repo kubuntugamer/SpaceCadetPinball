@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.4" date="2026-10-31">
+            <description>
+                <p>The Rust substep loop became the default; the original C++ loop stays available for comparison.</p>
+            </description>
+        </release>
         <release version="2.6.3" date="2026-10-31">
             <description>
                 <p>The ball substep loop can run from the Rust geometry crate (SCP_RUST_STEPPER=1), verified against the original in 2,100 scripted scenarios.</p>
