@@ -256,7 +256,9 @@ impl Component {
 ///
 /// Contract: pure. It may read the edge's own state and the ray, and must not
 /// call back into the world.
-pub type ExternalDistance = unsafe extern "C" fn(*const Ray, *mut f32) -> i32;
+/// `user_data` is the owning C++ edge; the callback must only read it.
+pub type ExternalDistance =
+    unsafe extern "C" fn(user_data: *mut core::ffi::c_void, ray: *const Ray, out: *mut f32) -> i32;
 
 pub enum EdgeGeometry {
     /// A wall segment; `Line` carries the cached direction the maths needs.
@@ -274,6 +276,8 @@ pub struct Edge {
     pub group: u32,
     pub wall_value: usize,
     pub geometry: EdgeGeometry,
+    /// Opaque host pointer handed back to an external distance callback.
+    pub user_data: usize,
     /// Boxes this edge was inserted into, so removal can unlink it exactly.
     boxes: Vec<u16>,
     processed_epoch: u32,
@@ -411,6 +415,7 @@ impl World {
             group,
             wall_value,
             geometry: EdgeGeometry::Line(line),
+            user_data: 0,
             boxes: Vec::new(),
             processed_epoch: 0,
         });
@@ -454,6 +459,7 @@ impl World {
                 center,
                 radius_sq: radius * radius,
             }),
+            user_data: 0,
             boxes: Vec::new(),
             processed_epoch: 0,
         });
@@ -467,6 +473,7 @@ impl World {
         owner: CompId,
         group: u32,
         distance: ExternalDistance,
+        user_data: usize,
         boxes: &[i32],
         wall_value: usize,
     ) -> EdgeId {
@@ -475,6 +482,7 @@ impl World {
             group,
             wall_value,
             geometry: EdgeGeometry::External { distance },
+            user_data,
             boxes: Vec::new(),
             processed_epoch: 0,
         });
@@ -572,9 +580,11 @@ impl World {
                     },
                     EdgeGeometry::External { distance } => {
                         let mut value = 0.0f32;
-                        // SAFETY: the callback is pure by contract and the out
-                        // pointer is to a local.
-                        if unsafe { distance(ray, &mut value) } == 0 {
+                        // SAFETY: the callback is pure by contract, the user
+                        // data is the host's own pointer, and the out pointer is
+                        // to a local.
+                        let user = edge.user_data as *mut core::ffi::c_void;
+                        if unsafe { distance(user, ray, &mut value) } == 0 {
                             value
                         } else {
                             NO_INTERSECTION
@@ -735,7 +745,11 @@ mod tests {
 
     static CALLS: AtomicUsize = AtomicUsize::new(0);
 
-    unsafe extern "C" fn fixed_distance(_ray: *const Ray, out: *mut f32) -> i32 {
+    unsafe extern "C" fn fixed_distance(
+        _user: *mut core::ffi::c_void,
+        _ray: *const Ray,
+        out: *mut f32,
+    ) -> i32 {
         CALLS.fetch_add(1, Ordering::Relaxed);
         // SAFETY: the world passes a valid out pointer.
         unsafe { *out = 5.0 };
@@ -749,7 +763,7 @@ mod tests {
         // Spans many boxes, so a per-box implementation would call the callback
         // once per box; the epoch makes it once per cast.
         let boxes = vec![0, 1, 10, 11, 20, 21, 22, 30];
-        let edge = world.add_external_edge(owner, 1, fixed_distance, &boxes, 0);
+        let edge = world.add_external_edge(owner, 1, fixed_distance, 0, &boxes, 0);
 
         CALLS.store(0, Ordering::Relaxed);
         let hit = world.cast(&ray(-10.0, 5.0, 0.0, 0.0, 1.0), &[]).unwrap();

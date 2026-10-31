@@ -208,6 +208,7 @@ pub unsafe extern "C" fn scp_world_add_external_edge(
     owner: u64,
     group: u32,
     distance: Option<crate::world::ExternalDistance>,
+    user_data: *mut core::ffi::c_void,
     boxes: *const i32,
     box_count: usize,
     wall_value: usize,
@@ -221,7 +222,14 @@ pub unsafe extern "C" fn scp_world_add_external_edge(
         // SAFETY: the caller passes `box_count` readable indices.
         unsafe { core::slice::from_raw_parts(boxes, box_count) }
     };
-    pack(world.add_external_edge(unpack_component(owner), group, distance, boxes, wall_value))
+    pack(world.add_external_edge(
+        unpack_component(owner),
+        group,
+        distance,
+        user_data as usize,
+        boxes,
+        wall_value,
+    ))
 }
 
 /// Removes a component and every edge it owns, unlinking them from the grid.
