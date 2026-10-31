@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.3" date="2026-10-31">
+            <description>
+                <p>The ball substep loop can run from the Rust geometry crate (SCP_RUST_STEPPER=1), verified against the original in 2,100 scripted scenarios.</p>
+            </description>
+        </release>
         <release version="2.6.2" date="2026-10-30">
             <description>
                 <p>The per-frame ball integration moved to the Rust geometry crate, verified bit-identical to the code it replaced.</p>
