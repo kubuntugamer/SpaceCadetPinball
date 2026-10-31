@@ -37,6 +37,12 @@ public:
 	// Edges filed in one box, for the debug overlay: the box lists are the
 	// world's when it owns them.
 	size_t BoxEdges(int x, int y, TEdgeSegment** out, size_t capacity);
+
+#ifdef SCP_USE_RUST_WORLD
+	// Answer to the world's activeness probe: components flip this per edge, so
+	// the world cannot decide from the owning component alone.
+	int32_t EdgeActiveForProbe(uint64_t edgeId);
+#endif
 	// The box walk this class used to own. Only run when nothing else needs it, but
 	// always compiled so SCP_WORLD_CHECK can compare it against the world.
 	float FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSegment** edge);

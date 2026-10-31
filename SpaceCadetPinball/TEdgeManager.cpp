@@ -17,6 +17,12 @@
 // read the edge and the ray and write one distance, and it may not call back
 // into scp_world_*. Group masking, the already-hit list and the visited mark are
 // all applied on the Rust side.
+static int32_t world_edge_active(void* userData, uint64_t edgeId)
+{
+	auto manager = static_cast<TEdgeManager*>(userData);
+	return manager->EdgeActiveForProbe(edgeId);
+}
+
 static int32_t world_edge_distance(void* userData, const ScpWorldRay* ray, float* distance)
 {
 	auto edge = static_cast<TEdgeSegment*>(userData);
@@ -60,6 +66,9 @@ TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 	BoxArray = new TEdgeBox[MaxBoxX * MaxBoxY];
 #ifdef SCP_USE_RUST_WORLD
 	World = scp_world_create(MinX, MinY, Width, Height);
+	// Every edge's active flag is the engine's own; without this the world would
+	// have to trust the component it belongs to, which does not see those flags.
+	scp_world_set_active_probe(World, world_edge_active, this);
 	// Set SCP_WORLD_CHECK=1 to run the C++ walk beside the world and report any
 	// disagreement on stderr; off in normal runs because it doubles the cost.
 	WorldCheck = std::getenv("SCP_WORLD_CHECK") != nullptr;
@@ -420,6 +429,20 @@ float TEdgeManager::FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSe
 float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge)
 {
 	return FindCollisionDistanceCpp(ray, ball, edge);
+}
+#endif
+
+#ifdef SCP_USE_RUST_WORLD
+int32_t TEdgeManager::EdgeActiveForProbe(uint64_t edgeId)
+{
+	auto found = WorldEdgeLookup.find(edgeId);
+	if (found == WorldEdgeLookup.end() || !found->second || !found->second->ActiveFlagPtr)
+	{
+		// An id this manager did not register has no flag to consult; say yes and
+		// let the edge's own callback decide, which is what happened before.
+		return 1;
+	}
+	return *found->second->ActiveFlagPtr ? 1 : 0;
 }
 #endif
 

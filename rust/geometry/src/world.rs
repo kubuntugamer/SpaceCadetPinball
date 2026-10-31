@@ -311,7 +311,14 @@ pub struct World {
     max_box_y: i32,
     boxes: Vec<BoxSlot>,
     epoch: u32,
+    /// The engine's own answer to "may this edge be tested?", installed once at
+    /// construction. Components flip a per-edge flag at runtime, which the
+    /// owning component cannot see; without a probe the owner decides, as before.
+    pub active_probe: Option<(ActiveProbe, *mut core::ffi::c_void)>,
 }
+
+/// Asks the host whether the edge behind this packed id is currently active.
+pub type ActiveProbe = unsafe extern "C" fn(*mut core::ffi::c_void, u64) -> i32;
 
 impl World {
     /// Same grid geometry `TEdgeManager` derives from the table bounds.
@@ -331,6 +338,24 @@ impl World {
                 .map(|_| BoxSlot::default())
                 .collect(),
             epoch: 0,
+            active_probe: None,
+        }
+    }
+
+    /// Whether an edge may be tested this cast. The engine can install a probe
+    /// to answer from its own per-edge flag — components flip that flag while the
+    /// game runs, which the owning component cannot see — and without one the
+    /// owner decides, as it always has.
+    fn edge_active(&self, edge_id: EdgeId, owner: CompId) -> bool {
+        match self.active_probe {
+            // SAFETY: the probe is the engine's own, installed once, and the id
+            // is this edge's packed value.
+            Some((probe, userdata)) => {
+                let (index, generation) = edge_id.into_parts();
+                let packed = (u64::from(generation) << 32) | u64::from(index);
+                unsafe { probe(userdata, packed) != 0 }
+            }
+            None => self.components.get(owner).is_some_and(|owner| owner.active),
         }
     }
 
@@ -554,17 +579,19 @@ impl World {
                     continue;
                 }
 
+                // The activeness probe runs on an immutable borrow: it answers
+                // from the engine's own state, not from this arena.
+                let Some(owner) = self.edges.get(edge_id).map(|edge| edge.owner) else {
+                    continue;
+                };
+                if !self.edge_active(edge_id, owner) {
+                    continue;
+                }
+
                 let Some(edge) = self.edges.get_mut(edge_id) else {
                     continue;
                 };
                 if edge.processed_epoch == epoch || (edge.group & ray.collision_mask as u32) == 0 {
-                    continue;
-                }
-                if !self
-                    .components
-                    .get(edge.owner)
-                    .is_some_and(|owner| owner.active)
-                {
                     continue;
                 }
                 edge.processed_epoch = epoch;

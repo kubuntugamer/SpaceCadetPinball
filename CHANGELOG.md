@@ -10,6 +10,10 @@ Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
 ## [Unreleased]
+
+### Changed
+
+* The collision world asks the engine whether an edge may be tested, instead of deciding from the component that owns it. Components flip a per-edge flag while the game runs, which the owner cannot see; this is what lets edge geometry move into the world without changing behaviour. No player-visible change.
 ### Changed
 
 * The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.

@@ -35,6 +35,8 @@ struct ScpWorldHit
 struct ScpWorld;
 
 typedef int32_t (*ScpWorldDistance)(void* userData, const ScpWorldRay* ray, float* distance);
+// The host's answer to "may this edge be tested?", given the packed edge id.
+typedef int32_t (*ScpWorldActive)(void* userData, uint64_t edge);
 
 extern "C"
 {
@@ -44,6 +46,9 @@ extern "C"
 	uint64_t scp_world_add_component(ScpWorld* world, float elasticity, float smoothness, float boost,
 	                                 float threshold);
 	int32_t scp_world_set_component_active(ScpWorld* world, uint64_t component, int32_t active);
+	// Hands activeness back to the host: components flip a per-edge flag the
+	// owning component cannot see, so the cast asks instead of assuming.
+	void scp_world_set_active_probe(ScpWorld* world, ScpWorldActive probe, void* userData);
 	int32_t scp_world_is_component_active(ScpWorld* world, uint64_t component);
 
 	uint64_t scp_world_add_line_edge(ScpWorld* world, uint64_t owner, uint32_t group, float x0, float y0,

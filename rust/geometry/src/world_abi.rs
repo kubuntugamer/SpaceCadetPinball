@@ -14,7 +14,7 @@
 //! meant to be queued and drained by the caller after a step, which is what lets
 //! the physics run without the re-entrant aliasing the C++ version has.
 
-use crate::world::{Collider, CompId, EdgeId, Id, World};
+use crate::world::{ActiveProbe, Collider, CompId, EdgeId, Id, World};
 use crate::{Ray, Vector2};
 
 /// `ray_type` fields a query needs.
@@ -124,7 +124,23 @@ pub unsafe extern "C" fn scp_world_add_component(
     }))
 }
 
-/// Enables or disables a component; edges read this instead of `ActiveFlagPtr`.
+/// The engine's own answer to "may this edge be tested?", installed once at
+/// construction. Components flip a per-edge `char` while the game runs, which the
+/// owning component cannot see; with a probe, the cast asks the engine instead
+/// and the component flag stays the single source of truth.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_set_active_probe(
+    handle: *mut World,
+    probe: Option<ActiveProbe>,
+    userdata: *mut core::ffi::c_void,
+) {
+    if let Some(world) = unsafe { world(handle) } {
+        world.active_probe = probe.map(|probe| (probe, userdata));
+    }
+}
+
+/// Enables or disables a component. With no activeness probe installed this is
+/// what decides whether its edges may be tested.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn scp_world_set_component_active(
     handle: *mut World,
@@ -489,4 +505,54 @@ mod tests {
             scp_world_destroy(handle);
         }
     }
+
+    static PROBE_RESULT: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(1);
+
+    static PROBE_LAST: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+    unsafe extern "C" fn probe(_userdata: *mut core::ffi::c_void, edge: u64) -> i32 {
+        // No assertion here: this runs inside an `extern "C"` frame, where a
+        // panic would abort instead of failing the test.
+        PROBE_LAST.store(edge, core::sync::atomic::Ordering::Relaxed);
+        PROBE_RESULT.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    #[test]
+    fn the_activeness_probe_overrides_the_component_flag() {
+        // SAFETY: the world is created and destroyed inside this test.
+        unsafe {
+            let handle = scp_world_create(0.0, 0.0, 100.0, 150.0);
+            let wall = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
+            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, 0);
+            let query = ray(0.0, 75.0, 1.0, 0.0, 100.0);
+            let mut hit = AbiHit::default();
+
+            // No probe: the owning component decides, as before.
+            assert_eq!(scp_world_cast(handle, &query, ptr::null(), 0, &mut hit), 1);
+
+            // Probe refuses: the edge is skipped while its component is active.
+            PROBE_RESULT.store(0, core::sync::atomic::Ordering::Relaxed);
+            scp_world_set_active_probe(handle, Some(probe), ptr::null_mut());
+            assert_eq!(scp_world_cast(handle, &query, ptr::null(), 0, &mut hit), 0);
+            // The probe was handed the edge's packed id, the same one casts return.
+            assert_eq!(
+                PROBE_LAST.load(core::sync::atomic::Ordering::Relaxed),
+                edge
+            );
+
+            // Probe allows: the edge is tested even with the component off, which
+            // is what a per-edge flag the engine flips needs to be able to say.
+            PROBE_RESULT.store(1, core::sync::atomic::Ordering::Relaxed);
+            assert_eq!(scp_world_set_component_active(handle, wall, 0), 0);
+            assert_eq!(scp_world_cast(handle, &query, ptr::null(), 0, &mut hit), 1);
+            assert_eq!(hit.edge, edge);
+
+            // Removing the probe hands the decision back to the component.
+            scp_world_set_active_probe(handle, None, ptr::null_mut());
+            assert_eq!(scp_world_cast(handle, &query, ptr::null(), 0, &mut hit), 0);
+
+            scp_world_destroy(handle);
+        }
+    }
+
 }
