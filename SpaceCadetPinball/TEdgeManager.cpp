@@ -69,6 +69,13 @@ TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 TEdgeManager::~TEdgeManager()
 {
 #ifdef SCP_USE_RUST_WORLD
+	if (WorldCheck)
+	{
+		// Printed even when nothing disagreed: an empty log on its own cannot tell
+		// "every cast matched" from "the check never ran".
+		fprintf(stderr, "SCP_WORLD_CHECK: %zu casts compared, %d mismatches\n", WorldCheckCasts,
+		        WorldCheckMismatches);
+	}
 	scp_world_destroy(World);
 	World = nullptr;
 #endif
@@ -273,6 +280,7 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 
 	if (WorldCheck)
 	{
+		++WorldCheckCasts;
 		// Both walks run on the same ray and the answers must be identical, edge
 		// for edge. A disagreement means the world's box membership or ordering
 		// differs from the array it replaced, which is invisible from gameplay

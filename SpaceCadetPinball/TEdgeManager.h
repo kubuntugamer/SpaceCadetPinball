@@ -72,6 +72,7 @@ private:
 
 	ScpWorld* World{};
 	bool WorldCheck{};
+	size_t WorldCheckCasts{};
 	int WorldCheckMismatches{};
 	std::unordered_map<TEdgeSegment*, WorldEdge> WorldEdges;
 	std::unordered_map<uint64_t, TEdgeSegment*> WorldEdgeLookup;
