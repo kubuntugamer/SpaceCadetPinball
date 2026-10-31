@@ -12,6 +12,7 @@
 //! matters for a physics engine where a one-ulp change can alter a bounce.
 
 pub mod grid;
+pub mod proj;
 
 /// 2D vector; matches C++ `vector2`.
 #[repr(C)]

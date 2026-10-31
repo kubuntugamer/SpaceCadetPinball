@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "proj.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "proj_rust_abi.h"
+#endif
+
 mat4_row_major proj::matrix;
 float proj::d_, proj::centerx, proj::centery;
 float proj::zscaler, proj::zmin, proj::zmax;
@@ -23,30 +27,63 @@ void proj::init(float* mat4x3, float d, float centerX, float centerY, float zMin
 	zmax = static_cast<float>(0xffFFffFF) / zScaler + zMin;
 }
 
+#ifdef SCP_USE_RUST_GEOMETRY
+static_assert(sizeof(RustMat4) == sizeof(mat4_row_major), "Projection matrix ABI mirror size mismatch");
+static_assert(sizeof(RustVector4) == sizeof(vector_type4), "Projection row ABI mirror size mismatch");
+static_assert(sizeof(RustVector2i) == sizeof(vector2i), "Projection point ABI mirror size mismatch");
+static_assert(sizeof(RustVector3) == sizeof(vector3), "Projection vector ABI mirror size mismatch");
+
+// The projection state stays in these statics; each Rust call receives a copy, so
+// the boundary has no shared mutable state. These helpers are declared here (and
+// not in proj.h) so the private statics stay private.
+#define SCP_PROJ_RUST_STATE()                                                                                      \
+	const RustMat4 rustMatrix = *reinterpret_cast<const RustMat4*>(&matrix);                                        \
+	const RustProjectionParams rustParams{d_, centerx, centery, zscaler, zmin, zmax}
+#endif
+
 vector3 proj::matrix_vector_multiply(const mat4_row_major& mat, const vector3& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const auto rustMat = *reinterpret_cast<const RustMat4*>(&mat);
+	const RustVector3 rustVec{vec.X, vec.Y, vec.Z};
+	const auto result = scp_proj_matrix_vector_multiply(&rustMat, &rustVec);
+	return vector3{result.X, result.Y, result.Z};
+#else
 	vector3 dstVec;
 	const float x = vec.X, y = vec.Y, z = vec.Z;
 	dstVec.X = z * mat.Row0.Z + y * mat.Row0.Y + x * mat.Row0.X + mat.Row0.W;
 	dstVec.Y = z * mat.Row1.Z + y * mat.Row1.Y + x * mat.Row1.X + mat.Row1.W;
 	dstVec.Z = z * mat.Row2.Z + y * mat.Row2.Y + x * mat.Row2.X + mat.Row2.W;
 	return dstVec;
+#endif
 }
 
 float proj::z_distance(const vector3& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	SCP_PROJ_RUST_STATE();
+	const RustVector3 rustVec{vec.X, vec.Y, vec.Z};
+	return scp_proj_z_distance(&rustMatrix, &rustVec);
+#else
 	auto projVec = matrix_vector_multiply(matrix, vec);
 	return maths::magnitude(projVec);
+#endif
 }
 
 vector2i proj::xform_to_2d(const vector2& vec)
 {
-	vector3 vec3{ vec.X, vec.Y, 0 };
+	vector3 vec3{vec.X, vec.Y, 0};
 	return xform_to_2d(vec3);
 }
 
 vector3 proj::ReverseXForm(const vector2i& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	SCP_PROJ_RUST_STATE();
+	const RustVector2i rustVec{vec.X, vec.Y};
+	const auto result = scp_proj_reverse_xform(&rustMatrix, &rustParams, &rustVec);
+	return vector3{result.X, result.Y, result.Z};
+#else
 	// Pinball perspective projection matrix, the same for all tables resolutions:
 	// X: 1.000000      Y: 0.000000      Z: 0.000000      W: 0.000000
 	// X: 0.000000      Y: -0.913545     Z: 0.406737      W: 3.791398
@@ -77,10 +114,18 @@ vector3 proj::ReverseXForm(const vector2i& vec)
 	auto y0 = (y2 * (A * z0 + G) - B * z0 - F) / (A + B * y2);
 	auto x0 = x2 * (A * z0 - B * y0 + G);
 	return {x0, y0, z0};
+#endif
 }
 
 vector2i proj::xform_to_2d(const vector3& vec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	SCP_PROJ_RUST_STATE();
+	const RustVector3 rustVec{vec.X, vec.Y, vec.Z};
+	RustVector2i result{};
+	scp_proj_xform_to_2d(&rustMatrix, &rustParams, &rustVec, &result);
+	return vector2i{result.X, result.Y};
+#else
 	float projCoef;
 
 	auto projVec = matrix_vector_multiply(matrix, vec);
@@ -93,6 +138,7 @@ vector2i proj::xform_to_2d(const vector3& vec)
 		static_cast<int>(projVec.X * projCoef + centerx),
 		static_cast<int>(projVec.Y * projCoef + centery)
 	};
+#endif
 }
 
 void proj::recenter(float centerX, float centerY)
@@ -103,6 +149,10 @@ void proj::recenter(float centerX, float centerY)
 
 uint16_t proj::NormalizeDepth(float depth)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	const RustProjectionParams rustParams{d_, centerx, centery, zscaler, zmin, zmax};
+	return scp_proj_normalize_depth(&rustParams, depth);
+#else
 	uint16_t result = 0;
 	if (depth >= zmin)
 	{
@@ -113,4 +163,5 @@ uint16_t proj::NormalizeDepth(float depth)
 			result = 0xffFF;
 	}
 	return result;
+#endif
 }

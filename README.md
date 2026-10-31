@@ -13,7 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
-| Rust migration | The maths layer and the collision-grid walk (`rust/geometry`) run in Rust; the rest of the engine remains C++ |
+| Rust migration | The maths, collision-grid and projection layers (`rust/geometry`) run in Rust; the object graph and platform shell remain C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -121,13 +121,17 @@ If there is no FluidSynth or no SoundFont, the game runs normally without music.
 
 ## Rust migration slice
 
-The engine is migrating to Rust one self-contained layer at a time. The maths
-layer -- `maths.cpp`: vectors, rectangles, ray/circle and ray/line intersection,
-line construction, ramp edge search, flipper collision probing and the ball
-rebound model -- and the edge-grid walk that both finds and files table walls
-(`TEdgeManager::FindCollisionDistance`, `TLine::place_in_grid`) are implemented
-in the dependency-free crate at `rust/geometry`, and every build links it by
-default:
+The engine is migrating to Rust one self-contained layer at a time. Everything
+that is pure math now lives in the dependency-free crate at `rust/geometry`, and
+every build links it by default:
+
+* the maths layer (`maths.cpp`): vectors, rectangles, ray/circle and ray/line
+  intersection, line construction, ramp edge search, flipper collision probing
+  and the ball rebound model;
+* the edge-grid walk that both files table walls and finds them along a ball ray
+  (`TEdgeManager::FindCollisionDistance`, `TLine::place_in_grid`);
+* the projection (`proj.cpp`): matrix multiply, depth, 3D-to-2D sprite transform,
+  reverse transform and z-buffer normalization.
 
 ```bash
 cmake -S . -B build
@@ -143,18 +147,21 @@ debugging a suspected port regression on a machine without Rust.
 
 Every ported routine is checked against its C++ original: the differential tests
 compile both implementations and compare results -- bit for bit over 20,000
-randomized maths cases, box for box over 200,000 edge-grid cases -- so a ported
-routine cannot silently drift.
+maths cases and 200,000 projection cases, box for box over 200,000 edge-grid
+cases -- so a ported routine cannot silently drift.
 
 ```bash
 cmake -S . -B build-parity -DSCP_BUILD_PARITY_TESTS=ON
 cmake --build build-parity
-./bin/maths_parity && ./bin/edgegrid_parity
+./bin/maths_parity && ./bin/edgegrid_parity && ./bin/proj_parity
 ```
 
-The renderer, physics objects, input, audio, platform layers and the vendored
-ImGui/miniaudio/stb sources are still C++; that remainder is what the migration
-still has to cover.
+What remains is the object graph and the platform shell, not math: the physics
+objects (`TBall`, the edge and flipper types, targets, plunger), the table/scene
+loader, input and UI, the Vulkan renderer, audio, and the vendored
+ImGui/miniaudio/stb sources. Those reference each other through pointers and call
+back into game logic, sprites and timers, so they need an ownership model before
+code moves; issue #15 tracks the phases.
 
 ## Building
 

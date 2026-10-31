@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.4.0" date="2026-10-30">
+            <description>
+                <p>Moves the projection into Rust: matrix multiply, depth, the 3D-to-2D sprite transform, the reverse transform and z-buffer depth normalization. Completes the engine's math kernel in Rust, guarded by a differential test over 200,000 randomized cases.</p>
+            </description>
+        </release>
         <release version="2.3.0" date="2026-10-30">
             <description>
                 <p>Moves the table's collision-grid walk into Rust: one implementation now both files wall segments into the box grid and walks the boxes a ball ray crosses, replacing the duplicated C++ Bresenham traversals. Guarded by a differential test over 200,000 randomized cases.</p>

@@ -11,6 +11,14 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-30
+
+### Changed
+
+* The projection now runs in Rust (`rust/geometry`, `proj` module): matrix multiply, projected depth, the 3D-to-2D sprite transform, the reverse transform that turns a screen position back into table coordinates, and z-buffer depth normalization. The engine keeps its `proj` statics in C++ and passes them by value, so the boundary has no shared mutable state.
+* Added `proj_parity`, comparing the Rust projection against the original `proj.cpp` bit for bit over 200,000 randomized matrices, parameters and points (1,000,000 comparisons).
+* Depth normalization reproduces the original's out-of-range cast behaviour rather than saturating, so a depth the C++ wraps stays wrapped. Real sprite depths stay inside the 16-bit range, where the behaviour is defined.
+
 ## [2.3.0] - 2026-10-30
 
 ### Changed
