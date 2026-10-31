@@ -404,6 +404,13 @@ float TEdgeManager::FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSe
 	return distance;
 }
 
+#ifndef SCP_USE_RUST_WORLD
+float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge)
+{
+	return FindCollisionDistanceCpp(ray, ball, edge);
+}
+#endif
+
 vector2 TEdgeManager::NormalizeBox(vector2 pt) const
 {
 	// Standard PB Box ranges: X [-8, 8]; Y [-14, 15]; Top right corner: (-8, -14)

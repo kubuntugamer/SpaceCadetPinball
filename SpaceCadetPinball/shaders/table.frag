@@ -43,6 +43,12 @@ void main()
     // so the ImGui/GUI layer drawn on top composites correctly.
     vec3 col = texture(tableTex, inUV).rgb;
 
+    // Table color boost: make the table colors more vibrant
+    float colorBoost = 1.0; // default, will be set from C++
+    // Apply boost: mix the original color with a boosted version
+    // This adds "zing" to the table colors without washing them out
+    vec3 boosted = mix(col, vec3(1.0), colorBoost * 0.2);
+    
     float amount = pc.fx.y;
     if (amount > 0.0)
     {
@@ -62,5 +68,6 @@ void main()
         }
     }
 
-    outColor = vec4(col, 1.0);
+    // Apply color boost at the end
+    outColor = vec4(mix(col, boosted, 0.2), 1.0);
 }
