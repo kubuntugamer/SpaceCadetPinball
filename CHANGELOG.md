@@ -13,7 +13,7 @@ below concerns them.
 
 ### Changed
 
-* Build option `SCP_USE_RUST_WORLD` (off by default) hands collision box membership, the ray walk and the per-query visited marks to the Rust world in `rust/geometry`; edges keep their C++ collision maths and register a distance callback. Default builds are unchanged.
+* Build option `SCP_USE_RUST_WORLD` (off by default) hands collision box membership, the ray walk and the per-query visited marks to the Rust world in `rust/geometry`; edges keep their C++ collision maths and register a distance callback. Run such a build with `SCP_WORLD_CHECK=1` to execute the old walk beside it and print any disagreement. Default builds are unchanged.
 
 ## [2.5.0] - 2026-10-30
 

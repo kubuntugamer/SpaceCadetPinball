@@ -60,6 +60,9 @@ TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 	BoxArray = new TEdgeBox[MaxBoxX * MaxBoxY];
 #ifdef SCP_USE_RUST_WORLD
 	World = scp_world_create(MinX, MinY, Width, Height);
+	// Set SCP_WORLD_CHECK=1 to run the C++ walk beside the world and report any
+	// disagreement on stderr; off in normal runs because it doubles the cost.
+	WorldCheck = std::getenv("SCP_WORLD_CHECK") != nullptr;
 #endif
 }
 
@@ -102,6 +105,16 @@ void TEdgeManager::add_edge_to_box(int x, int y, TEdgeSegment* edge)
 	auto& entry = WorldEdges[edge];
 	entry.Boxes.push_back(x + y * MaxBoxX);
 	PendingWorldEdges.push_back(edge);
+
+	if (WorldCheck)
+	{
+		// The comparison mode needs the reference lists it is comparing against.
+		auto& list = BoxArray[x + y * MaxBoxX].EdgeList;
+		if (std::find(list.begin(), list.end(), edge) == list.end())
+		{
+			list.push_back(edge);
+		}
+	}
 #else
 	auto& list = BoxArray[x + y * MaxBoxX].EdgeList;
 	assertm(std::find(list.begin(), list.end(), edge) == list.end(), "Duplicate inserted into box");
@@ -213,12 +226,9 @@ void TEdgeManager::FlushWorldEdges()
 }
 #endif
 
-float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge)
-{
 #ifdef SCP_USE_RUST_WORLD
-	// The walk, box membership and visited marks are the world's; each candidate
-	// still asks its C++ edge for a distance through the registered callback, so
-	// the box order and the tie-breaking between equidistant edges are unchanged.
+float TEdgeManager::CastWorld(ray_type* ray, TBall* ball, TEdgeSegment** edge)
+{
 	if (!World)
 	{
 		return 1000000000.0f;
@@ -251,7 +261,42 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 	}
 
 	return 1000000000.0f;
-#else
+}
+
+float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge)
+{
+	// The walk, box membership and visited marks are the world's; each candidate
+	// still asks its C++ edge for a distance through the registered callback, so
+	// the box order and the tie-breaking between equidistant edges are unchanged.
+	TEdgeSegment* worldEdge = nullptr;
+	auto worldDistance = CastWorld(ray, ball, &worldEdge);
+
+	if (WorldCheck)
+	{
+		// Both walks run on the same ray and the answers must be identical, edge
+		// for edge. A disagreement means the world's box membership or ordering
+		// differs from the array it replaced, which is invisible from gameplay
+		// until a wall is silently missed.
+		TEdgeSegment* cppEdge = nullptr;
+		auto cppDistance = FindCollisionDistanceCpp(ray, ball, &cppEdge);
+		if (cppEdge != worldEdge || cppDistance != worldDistance)
+		{
+			if (WorldCheckMismatches++ < 20)
+			{
+				fprintf(stderr,
+						"SCP_WORLD_CHECK mismatch: cpp edge %p dist %.9g, world edge %p dist %.9g\n",
+						static_cast<void*>(cppEdge), cppDistance, static_cast<void*>(worldEdge), worldDistance);
+			}
+		}
+	}
+
+	*edge = worldEdge;
+	return worldDistance;
+}
+#endif
+
+float TEdgeManager::FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSegment** edge)
+{
 	auto distance = 1000000000.0f;
 	auto edgeIndex = 0;
 
@@ -357,7 +402,6 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 	}
 
 	return distance;
-#endif
 }
 
 vector2 TEdgeManager::NormalizeBox(vector2 pt) const

@@ -4,6 +4,8 @@
 #ifdef SCP_USE_RUST_WORLD
 #include "world_abi.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 #include <vector>
 #endif
@@ -32,6 +34,9 @@ public:
 	void add_field_to_box(int x, int y, field_effect_type* field);
 	int TestGridBox(int x, int y, float* distPtr, TEdgeSegment** edgeDst, ray_type* ray, TBall* ball, int edgeIndex);
 	float FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge);
+	// The box walk this class used to own. Only run when nothing else needs it, but
+	// always compiled so SCP_WORLD_CHECK can compare it against the world.
+	float FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSegment** edge);
 	vector2 NormalizeBox(vector2 pt) const;
 	vector2 DeNormalizeBox(vector2 pt) const;
 
@@ -63,8 +68,11 @@ private:
 
 	void FlushWorldEdges();
 	uint64_t OwnerFor(TCollisionComponent* component);
+	float CastWorld(ray_type* ray, TBall* ball, TEdgeSegment** edge);
 
 	ScpWorld* World{};
+	bool WorldCheck{};
+	int WorldCheckMismatches{};
 	std::unordered_map<TEdgeSegment*, WorldEdge> WorldEdges;
 	std::unordered_map<uint64_t, TEdgeSegment*> WorldEdgeLookup;
 	std::unordered_map<TCollisionComponent*, uint64_t> WorldComponents;

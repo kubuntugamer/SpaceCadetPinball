@@ -7,7 +7,12 @@ seam, and `world_abi.rs` exposes them. With `-DSCP_USE_RUST_WORLD=ON`,
 ray walk and the visited marks are the world's, while every edge still registers
 as `External` and computes its own distance in C++. So the grid half of slice 1
 is switched over and the geometry half (`TLine`/`TCircle` moving to Rust) is not.
-Off by default until a full play test on every component. Scope: the
+Off by default until a full play test on every component.
+
+`SCP_WORLD_CHECK=1` at runtime runs the old C++ walk beside the world on every
+cast and prints any disagreement (edge or distance) to stderr. That is the
+substitute for traces the tree cannot carry: the real 3DPB table is not
+distributed, so the comparison has to happen inside a real game. Scope: the
 pointer-linked collision object graph that issue #15 calls phase 3. The maths layer, the edge-grid walk
 and the projection are already Rust; this document decides *how the remaining
 objects get an owner* before any of them move.
