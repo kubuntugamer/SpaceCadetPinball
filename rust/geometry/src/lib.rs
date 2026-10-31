@@ -127,7 +127,7 @@ pub const NO_INTERSECTION: f32 = 1_000_000_000.0;
 // bits. Going through `f64` instead differs by one ulp for trig on some angles,
 // which the parity test against the C++ implementation catches.
 #[inline]
-fn sqrt_f32(value: f32) -> f32 {
+pub(crate) fn sqrt_f32(value: f32) -> f32 {
     value.sqrt()
 }
 
@@ -142,8 +142,16 @@ fn cos_f32(angle: f32) -> f32 {
 }
 
 #[inline]
-fn dot(first: Vector2, second: Vector2) -> f32 {
+pub(crate) fn dot(first: Vector2, second: Vector2) -> f32 {
     first.x * second.x + first.y * second.y
+}
+
+/// 2D cross product (the Z component of the 3D analogue); matches `maths::cross`
+/// for two `vector2`s. Shared with the flipper response, which tests which side
+/// of the tip line a contact fell on.
+#[inline]
+pub(crate) fn cross2(first: Vector2, second: Vector2) -> f32 {
+    first.x * second.y - first.y * second.x
 }
 
 #[inline]
@@ -549,20 +557,17 @@ pub unsafe extern "C" fn scp_geometry_rotate_vector(vector: *mut Vector2, angle:
 /// Resolve a ball collision against a wall or other edge.
 ///
 /// Returns the rebound speed, and writes the ball's new position, direction and
-/// speed back through `ball`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn scp_geometry_basic_collision(
-    ball: *mut BallState,
-    next_position: *const Vector2,
-    direction: *const Vector2,
+/// speed back through `ball`. Shared by the wall/edge response and the flipper
+/// response, which is why it takes `&mut BallState` rather than a raw pointer.
+pub(crate) fn basic_collision(
+    ball: &mut BallState,
+    next_position: Vector2,
+    direction: Vector2,
     elasticity: f32,
     smoothness: f32,
     threshold: f32,
     boost: f32,
 ) -> f32 {
-    // SAFETY: the C++ wrapper passes valid pointers, with `ball` writable.
-    let (ball, next_position, direction) = unsafe { (&mut *ball, *next_position, *direction) };
-
     // Nudge the ball off the surface so the next frame does not re-collide.
     ball.position = Vector2 {
         x: next_position.x + direction.x * 0.0005,
@@ -593,6 +598,25 @@ pub unsafe extern "C" fn scp_geometry_basic_collision(
     }
     // The reported rebound speed is the pre-boost one, as in the original.
     rebounds_speed
+}
+
+/// C entry point for [`basic_collision`].
+///
+/// Returns the rebound speed, and writes the ball's new position, direction and
+/// speed back through `ball`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_geometry_basic_collision(
+    ball: *mut BallState,
+    next_position: *const Vector2,
+    direction: *const Vector2,
+    elasticity: f32,
+    smoothness: f32,
+    threshold: f32,
+    boost: f32,
+) -> f32 {
+    // SAFETY: the C++ wrapper passes valid pointers, with `ball` writable.
+    let (ball, next_position, direction) = unsafe { (&mut *ball, *next_position, *direction) };
+    basic_collision(ball, next_position, direction, elasticity, smoothness, threshold, boost)
 }
 
 /// Pick the ramp triangle edge closest to the wall segment, as

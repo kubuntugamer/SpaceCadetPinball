@@ -140,6 +140,34 @@ struct RustFlipperPoints
 	RustCircle CircleT1;
 };
 
+// Everything `TFlipperEdge::EdgeCollision` reads and writes. The contact point
+// and rebound direction the distance query left behind come in, the flipper's
+// own geometry and motion come in, and the resolved ball state goes back out.
+// The flipper's members are not written: `CollisionLinePerp` is read only within
+// the response, so it stays on the Rust side.
+struct RustFlipperCollision
+{
+	// In/out: the ball being hit.
+	RustBallState Ball;
+	// In: the contact point and collision direction from the distance query.
+	RustVector2 NextBallPosition;
+	RustVector2 CollisionDirection;
+	// In: the flipper's own geometry and motion state.
+	RustVector2 T1;
+	RustVector2 RotOrigin;
+	RustVector2 LineAPerp;
+	RustVector2 LineBPerp;
+	float CircleBaseRadiusSq;
+	float AngleMax;
+	float MoveSpeed;
+	float DistanceDivSq;
+	float CollisionMult;
+	float Elasticity;
+	float Smoothness;
+	// In: the motion flag, as the engine's MessageCode discriminant.
+	int32_t FlipperFlag;
+};
+
 extern "C"
 {
 	void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
@@ -177,4 +205,5 @@ extern "C"
 		const RustWallPoint* wall, RustVector2* lineEnd, RustVector2* lineStart);
 	float scp_geometry_distance_to_flipper(RustLine* lineA, RustLine* lineB, const RustCircle* circleBase,
 		const RustCircle* circleT1, const RustRay* ray1, RustRay* ray2);
+	void scp_flipper_edge_collision(RustFlipperCollision* state);
 }

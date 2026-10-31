@@ -8,6 +8,7 @@
 
 
 #include "pb.h"
+#include "TBall.h"
 #include "TLine.h"
 #include "TPinballTable.h"
 #include "TTableLayer.h"
@@ -125,6 +126,39 @@ float TFlipperEdge::FindCollisionDistance(const ray_type& ray)
 
 void TFlipperEdge::EdgeCollision(TBall* ball, float distance)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)distance;
+	// The response reads the contact point and collision direction the distance
+	// query left in NextBallPosition/CollisionDirection, the flipper's geometry
+	// and motion, and the ball; only the ball comes back changed. CollisionLinePerp
+	// is read only within the response, so it never leaves the Rust side.
+	RustFlipperCollision state{};
+	state.Ball.Position = {ball->Position.X, ball->Position.Y};
+	state.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	state.Ball.Speed = ball->Speed;
+	state.NextBallPosition = {NextBallPosition.X, NextBallPosition.Y};
+	state.CollisionDirection = {CollisionDirection.X, CollisionDirection.Y};
+	state.T1 = {T1.X, T1.Y};
+	state.RotOrigin = {RotOrigin.X, RotOrigin.Y};
+	state.LineAPerp = {LineA.PerpendicularC.X, LineA.PerpendicularC.Y};
+	state.LineBPerp = {LineB.PerpendicularC.X, LineB.PerpendicularC.Y};
+	state.CircleBaseRadiusSq = circlebase.RadiusSq;
+	state.AngleMax = AngleMax;
+	state.MoveSpeed = MoveSpeed;
+	state.DistanceDivSq = DistanceDivSq;
+	state.CollisionMult = CollisionMult;
+	state.Elasticity = Elasticity;
+	state.Smoothness = Smoothness;
+	state.FlipperFlag = static_cast<int32_t>(FlipperFlag);
+
+	scp_flipper_edge_collision(&state);
+
+	ball->Position.X = state.Ball.Position.X;
+	ball->Position.Y = state.Ball.Position.Y;
+	ball->Direction.X = state.Ball.Direction.X;
+	ball->Direction.Y = state.Ball.Direction.Y;
+	ball->Speed = state.Ball.Speed;
+#else
 	if (FlipperFlag == MessageCode::TFlipperNull)
 	{
 		maths::basic_collision(
@@ -194,6 +228,7 @@ void TFlipperEdge::EdgeCollision(TBall* ball, float distance)
 			elasticity = (1.0f - std::sqrt(distanceSq / DistanceDivSq)) * Elasticity;
 		maths::basic_collision(ball, &NextBallPosition, &CollisionDirection, elasticity, Smoothness, 1e9f, 0.0);
 	}
+#endif
 }
 
 void TFlipperEdge::place_in_grid(RectF* aabb)
