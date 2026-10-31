@@ -46,6 +46,28 @@ jobs:
           name: SpaceCadetPinball-linux-x86_64
           path: bin/SpaceCadetPinball
 
+  linux-world:
+    # Builds the collision switch-over the default job deliberately leaves off, so
+    # the Rust world keeps compiling and linking while it is still experimental.
+    name: Linux (x86_64, Rust world)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libglfw3-dev libvulkan-dev libfluidsynth-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCP_USE_RUST_WORLD=ON
+
+      - name: Build
+        run: cmake --build build
+
   windows:
     name: Windows (x64)
     runs-on: windows-latest

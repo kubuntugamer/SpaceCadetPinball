@@ -16,6 +16,10 @@ project(SpaceCadetPinball VERSION ${SPACECADETPINBALL_VERSION})
 set(CMAKE_CXX_STANDARD 11)
 
 option(SCP_USE_RUST_GEOMETRY "Use the Rust maths/geometry crate instead of the C++ reference implementation" ON)
+# Moves collision box membership, the ray walk and the visited marks into the
+# Rust world; C++ edges keep their own distance maths and register a callback.
+# Experimental: needs a play test on every component before it becomes the default.
+option(SCP_USE_RUST_WORLD "Let the Rust collision world own the edge grid" OFF)
 set(SCP_RUST_TARGET "" CACHE STRING "Optional Rust target triple for the geometry crate")
 if(SCP_USE_RUST_GEOMETRY)
     message(STATUS "Rust geometry enabled (Cargo required)")
@@ -88,6 +92,11 @@ if(SCP_USE_RUST_GEOMETRY)
     add_library(spacecadet_geometry STATIC IMPORTED GLOBAL)
     set_target_properties(spacecadet_geometry PROPERTIES IMPORTED_LOCATION "${RUST_GEOMETRY_LIBRARY}")
 endif()
+
+if(SCP_USE_RUST_WORLD AND NOT SCP_USE_RUST_GEOMETRY)
+    message(FATAL_ERROR "SCP_USE_RUST_WORLD requires SCP_USE_RUST_GEOMETRY")
+endif()
+
 
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
@@ -328,6 +337,9 @@ target_link_libraries(SpaceCadetPinball glfw Vulkan::Vulkan)
 if(SCP_USE_RUST_GEOMETRY)
     add_dependencies(SpaceCadetPinball spacecadet_rust_geometry)
     target_compile_definitions(SpaceCadetPinball PRIVATE SCP_USE_RUST_GEOMETRY)
+    if(SCP_USE_RUST_WORLD)
+        target_compile_definitions(SpaceCadetPinball PRIVATE SCP_USE_RUST_WORLD)
+    endif()
     target_link_libraries(SpaceCadetPinball spacecadet_geometry)
     if(WIN32)
         # The Rust static library carries its own std. The objects the linker

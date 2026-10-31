@@ -1,6 +1,13 @@
 #pragma once
 #include "TCollisionComponent.h"
 
+#ifdef SCP_USE_RUST_WORLD
+#include "world_abi.h"
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
+#endif
+
 struct ray_type;
 class TEdgeBox;
 
@@ -40,4 +47,29 @@ public:
 	float Height;
 	TEdgeBox* BoxArray;
 	TEdgeSegment* EdgeArray[1000]{};
+
+#ifdef SCP_USE_RUST_WORLD
+private:
+	// The Rust world owns box membership, the ray walk and the per-query
+	// "already tested" marks. An edge still written in C++ registers a distance
+	// callback, so its own collision maths keeps running here.
+	struct WorldEdge
+	{
+		uint64_t Id{};
+		uint64_t Owner{};
+		std::vector<int32_t> Boxes;
+		bool Registered{};
+	};
+
+	void FlushWorldEdges();
+	uint64_t OwnerFor(TCollisionComponent* component);
+
+	ScpWorld* World{};
+	std::unordered_map<TEdgeSegment*, WorldEdge> WorldEdges;
+	std::unordered_map<uint64_t, TEdgeSegment*> WorldEdgeLookup;
+	std::unordered_map<TCollisionComponent*, uint64_t> WorldComponents;
+	// Edges seen by add_edge_to_box since the last query; registration waits so
+	// that place_in_grid can finish adding every box first.
+	std::vector<TEdgeSegment*> PendingWorldEdges;
+#endif
 };

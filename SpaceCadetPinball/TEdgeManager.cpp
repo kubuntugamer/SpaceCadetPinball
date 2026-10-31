@@ -12,6 +12,39 @@
 #include "grid_rust_abi.h"
 #endif
 
+#ifdef SCP_USE_RUST_WORLD
+// Called by the Rust world for every candidate edge. It must stay pure: it may
+// read the edge and the ray and write one distance, and it may not call back
+// into scp_world_*. Group masking, the already-hit list and the visited mark are
+// all applied on the Rust side.
+static int32_t world_edge_distance(void* userData, const ScpWorldRay* ray, float* distance)
+{
+	auto edge = static_cast<TEdgeSegment*>(userData);
+	if (!edge || !edge->ActiveFlagPtr || !*edge->ActiveFlagPtr)
+	{
+		return 1;
+	}
+
+	ray_type native{};
+	native.Origin.X = ray->OriginX;
+	native.Origin.Y = ray->OriginY;
+	native.Direction.X = ray->DirectionX;
+	native.Direction.Y = ray->DirectionY;
+	native.MaxDistance = ray->MaxDistance;
+	native.MinDistance = ray->MinDistance;
+	native.CollisionMask = ray->CollisionMask;
+
+	auto hit = edge->FindCollisionDistance(native);
+	if (hit >= 1000000000.0f)
+	{
+		return 1;
+	}
+
+	*distance = hit;
+	return 0;
+}
+#endif
+
 TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 {
 	Width = width;
@@ -25,10 +58,17 @@ TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
 	AdvanceX = width / static_cast<float>(MaxBoxX);
 	AdvanceY = height / static_cast<float>(MaxBoxY);
 	BoxArray = new TEdgeBox[MaxBoxX * MaxBoxY];
+#ifdef SCP_USE_RUST_WORLD
+	World = scp_world_create(MinX, MinY, Width, Height);
+#endif
 }
 
 TEdgeManager::~TEdgeManager()
 {
+#ifdef SCP_USE_RUST_WORLD
+	scp_world_destroy(World);
+	World = nullptr;
+#endif
 	delete[] BoxArray;
 }
 
@@ -56,9 +96,17 @@ void TEdgeManager::add_edge_to_box(int x, int y, TEdgeSegment* edge)
 {
 	assertm((unsigned)x < (unsigned)MaxBoxX && (unsigned)y < (unsigned)MaxBoxY, "Box coordinates out of range");
 
+#ifdef SCP_USE_RUST_WORLD
+	// Collected here and handed to the world on the next query, once the edge has
+	// been placed in every box it overlaps.
+	auto& entry = WorldEdges[edge];
+	entry.Boxes.push_back(x + y * MaxBoxX);
+	PendingWorldEdges.push_back(edge);
+#else
 	auto& list = BoxArray[x + y * MaxBoxX].EdgeList;
 	assertm(std::find(list.begin(), list.end(), edge) == list.end(), "Duplicate inserted into box");
 	list.push_back(edge);
+#endif
 }
 
 void TEdgeManager::add_field_to_box(int x, int y, field_effect_type* field)
@@ -120,8 +168,90 @@ void TEdgeManager::FieldEffects(TBall* ball, vector2* dstVec)
 	}
 }
 
+#ifdef SCP_USE_RUST_WORLD
+uint64_t TEdgeManager::OwnerFor(TCollisionComponent* component)
+{
+	auto found = WorldComponents.find(component);
+	if (found != WorldComponents.end())
+	{
+		return found->second;
+	}
+
+	// Edge activeness is checked per edge in world_edge_distance, so the owner is
+	// registered as always active: a component here is a bookkeeping handle, not
+	// a switch the query is allowed to consult.
+	auto id = component
+		? scp_world_add_component(World, component->Elasticity, component->Smoothness, component->Boost,
+		                          component->Threshold)
+		: scp_world_add_component(World, 0.5f, 0.5f, 0.0f, 0.0f);
+	scp_world_set_component_active(World, id, 1);
+	WorldComponents[component] = id;
+	return id;
+}
+
+void TEdgeManager::FlushWorldEdges()
+{
+	for (auto edge : PendingWorldEdges)
+	{
+		auto& entry = WorldEdges[edge];
+		if (entry.Registered)
+		{
+			continue;
+		}
+
+		entry.Owner = OwnerFor(edge->CollisionComponent);
+		// Group 0xffffffff keeps the world from filtering; the group mask, the
+		// already-hit list and the active flag are applied where they always were.
+		entry.Id = scp_world_add_external_edge(World, entry.Owner, 0xffffffffu, world_edge_distance, edge,
+		                                       entry.Boxes.data(), entry.Boxes.size(),
+		                                       static_cast<size_t>(reinterpret_cast<uintptr_t>(edge->WallValue)));
+		entry.Registered = true;
+		WorldEdgeLookup[entry.Id] = edge;
+	}
+
+	PendingWorldEdges.clear();
+}
+#endif
+
 float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge)
 {
+#ifdef SCP_USE_RUST_WORLD
+	// The walk, box membership and visited marks are the world's; each candidate
+	// still asks its C++ edge for a distance through the registered callback, so
+	// the box order and the tie-breaking between equidistant edges are unchanged.
+	if (!World)
+	{
+		return 1000000000.0f;
+	}
+	FlushWorldEdges();
+
+	ScpWorldRay worldRay{ray->Origin.X, ray->Origin.Y, ray->Direction.X, ray->Direction.Y,
+	                     ray->MaxDistance, ray->MinDistance, ray->CollisionMask};
+
+	uint64_t hits[16];
+	size_t hitCount = 0;
+	for (auto index = 0; ball && index < ball->EdgeCollisionCount && hitCount < 16; ++index)
+	{
+		auto found = WorldEdges.find(ball->Collisions[index]);
+		if (found != WorldEdges.end() && found->second.Registered)
+		{
+			hits[hitCount++] = found->second.Id;
+		}
+	}
+
+	ScpWorldHit hit{};
+	if (scp_world_cast(World, &worldRay, hits, hitCount, &hit) == 1)
+	{
+		auto found = WorldEdgeLookup.find(hit.Edge);
+		if (found != WorldEdgeLookup.end())
+		{
+			*edge = found->second;
+			return hit.Distance;
+		}
+	}
+
+	return 1000000000.0f;
+#else
 	auto distance = 1000000000.0f;
 	auto edgeIndex = 0;
 
@@ -227,6 +357,7 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 	}
 
 	return distance;
+#endif
 }
 
 vector2 TEdgeManager::NormalizeBox(vector2 pt) const
