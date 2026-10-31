@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.0" date="2026-10-30">
+            <description>
+                <p>Collision box membership and the ray walk moved to the Rust geometry crate; gameplay is unchanged.</p>
+            </description>
+        </release>
         <release version="2.5.0" date="2026-10-30">
             <description>
                 <p>Added a Fullscreen Display option to choose the monitor used for fullscreen.</p>

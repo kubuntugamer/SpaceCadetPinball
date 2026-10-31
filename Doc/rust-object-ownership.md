@@ -1,13 +1,15 @@
 # Object ownership design: the collision graph
 
-Status: **slice 1 half done** -- `rust/geometry/src/world.rs` holds the
-generational arenas, the id-based grid, the epoch marks and the external-edge
-seam, and `world_abi.rs` exposes them. With `-DSCP_USE_RUST_WORLD=ON`,
-`TEdgeManager` no longer keeps box lists or a walked-edge array: membership, the
-ray walk and the visited marks are the world's, while every edge still registers
-as `External` and computes its own distance in C++. So the grid half of slice 1
-is switched over and the geometry half (`TLine`/`TCircle` moving to Rust) is not.
-Off by default until a full play test on every component.
+Status: **slice 1 half done, shipped as the default in 2.6.0** --
+`rust/geometry/src/world.rs` holds the generational arenas, the id-based grid,
+the epoch marks and the external-edge seam, and `world_abi.rs` exposes them.
+`TEdgeManager` no longer keeps box lists or a walked-edge array for casting:
+membership, the ray walk and the visited marks are the world's, while every edge
+still registers as `External` and computes its own distance in C++. So the grid
+half of slice 1 is switched over and the geometry half (`TLine`/`TCircle` moving
+to Rust) is not -- and cannot be on its own, because `TLine::EdgeCollision` hands
+`Line.RayIntersect` to the component that reads it.
+`-DSCP_USE_RUST_WORLD=OFF` still builds the original C++ walk, and CI builds both.
 
 `SCP_WORLD_CHECK=1` at runtime runs the old C++ walk beside the world on every
 cast and prints any disagreement (edge or distance) to stderr. That is the

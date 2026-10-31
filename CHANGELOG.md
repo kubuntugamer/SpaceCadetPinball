@@ -11,9 +11,16 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-30
+
 ### Changed
 
-* Build option `SCP_USE_RUST_WORLD` (off by default) hands collision box membership, the ray walk and the per-query visited marks to the Rust world in `rust/geometry`; edges keep their C++ collision maths and register a distance callback. Run such a build with `SCP_WORLD_CHECK=1` to execute the old walk beside it and print any disagreement. Default builds are unchanged.
+* Collision box membership, the ray walk and the per-query visited marks now come from the Rust world in `rust/geometry` instead of `TEdgeManager`'s box lists and walked-edge array. Edge distances still run through the C++ edge classes, so gameplay is unchanged; `-DSCP_USE_RUST_WORLD=OFF` builds the previous grid walk.
+* The debug overlay reads box contents from the world too, so the ball-edges view shows the same walls in both configurations.
+
+### Added
+
+* `SCP_WORLD_CHECK=1` runs the old C++ walk beside the world on every collision query and reports disagreements on stderr by DAT wall index, then prints a cast/mismatch total at exit. Diagnostic only; it doubles query cost.
 
 ## [2.5.0] - 2026-10-30
 

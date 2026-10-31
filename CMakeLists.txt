@@ -18,8 +18,9 @@ set(CMAKE_CXX_STANDARD 11)
 option(SCP_USE_RUST_GEOMETRY "Use the Rust maths/geometry crate instead of the C++ reference implementation" ON)
 # Moves collision box membership, the ray walk and the visited marks into the
 # Rust world; C++ edges keep their own distance maths and register a callback.
-# Experimental: needs a play test on every component before it becomes the default.
-option(SCP_USE_RUST_WORLD "Let the Rust collision world own the edge grid" OFF)
+# Default since 2.6.0, after a play test confirmed gameplay; set OFF to build the
+# original C++ grid walk.
+option(SCP_USE_RUST_WORLD "Let the Rust collision world own the edge grid" ON)
 set(SCP_RUST_TARGET "" CACHE STRING "Optional Rust target triple for the geometry crate")
 if(SCP_USE_RUST_GEOMETRY)
     message(STATUS "Rust geometry enabled (Cargo required)")
