@@ -11,6 +11,10 @@
 #include "TPinballTable.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "maths_rust_abi.h"
+#endif
+
 TBall::TBall(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, false),
                                                      TEdgeSegment(this, &ActiveFlag, 0)
 {
@@ -141,12 +145,33 @@ int TBall::Message(MessageCode code, float value)
 void TBall::throw_ball(vector3* direction, float angleMult, float speedMult1, float speedMult2)
 {
 	CollisionComp = nullptr;
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Both draws are taken up front: the original draws for the angle, rotates,
+	// then draws for the speed, and nothing in between consumes the sequence, so
+	// the values are the same either way. The rotation runs through the shear
+	// the original ships, and Z never takes part in it.
+	RustThrowBall state{};
+	state.Direction = {direction->X, direction->Y, direction->Z};
+	state.AngleMult = angleMult;
+	state.SpeedMult1 = speedMult1;
+	state.SpeedMult2 = speedMult2;
+	state.RandAngle = RandFloat();
+	state.RandSpeed = RandFloat();
+
+	scp_ball_throw(&state);
+
+	Direction.X = state.Direction.X;
+	Direction.Y = state.Direction.Y;
+	Direction.Z = state.Direction.Z;
+	Speed = state.Speed;
+#else
 	Direction = *direction;
 	float rnd = RandFloat();
 	float angle = (1.0f - (rnd + rnd)) * angleMult;
 	maths::RotateVector(Direction, angle);
 	rnd = RandFloat();
 	Speed = (1.0f - (rnd + rnd)) * (speedMult1 * speedMult2) + speedMult1;
+#endif
 }
 
 void TBall::EdgeCollision(TBall* ball, float distance)

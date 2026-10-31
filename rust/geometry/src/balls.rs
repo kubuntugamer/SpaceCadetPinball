@@ -6,7 +6,7 @@
 //! object. Order, ties and the 0.002 skin all match the original: a strict `<`
 //! keeps the earliest ball in list order when two are equidistant.
 
-use crate::{scp_geometry_ray_intersect_circle, Circle, Ray, Vector2};
+use crate::{rotate, scp_geometry_ray_intersect_circle, Circle, Ray, Vector2, Vector3};
 
 /// What the selection step needs to know about one [`TBall`](crate::balls::Sphere).
 #[repr(C)]
@@ -66,6 +66,55 @@ pub fn nearest(ray: &Ray, spheres: &[Sphere], skip: usize, span: f32, best: f32)
     }
 
     (winner, best)
+}
+
+/// `TBall::throw_ball`: the launch heading and speed a sink, kickout or demo
+/// toss gives a ball, in one struct.
+///
+/// The jitter is two host draws from `RandFloat()` — one for the angle, one for
+/// the speed — passed in as values because the CRT sequence they come from is
+/// host-owned (Doc/rust-object-ownership.md, §3.4). The original takes the angle
+/// draw, rotates, then takes the speed draw; nothing between them consumes the
+/// sequence, so both draws can be taken up front with the same result.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ThrowState {
+    /// In/out: the launch heading. X and Y take the jittered angle (through the
+    /// original's shear, see [`rotate`]); Z passes through untouched, because
+    /// the original rotates through its `vector2` base.
+    pub direction: Vector3,
+    /// In: the caller's angle and speed multipliers.
+    pub angle_mult: f32,
+    pub speed_mult1: f32,
+    pub speed_mult2: f32,
+    /// In: the host's `RandFloat()` draws for the angle and the speed.
+    pub rand_angle: f32,
+    pub rand_speed: f32,
+    /// Out: the ball's new speed.
+    pub speed: f32,
+}
+
+/// Apply the launch jitter: rotate the heading and derive the speed.
+pub fn throw_ball(state: &mut ThrowState) {
+    let angle = (1.0 - (state.rand_angle + state.rand_angle)) * state.angle_mult;
+    let mut direction = Vector2 {
+        x: state.direction.x,
+        y: state.direction.y,
+    };
+    rotate(&mut direction, angle);
+    state.direction.x = direction.x;
+    state.direction.y = direction.y;
+
+    state.speed = (1.0 - (state.rand_speed + state.rand_speed))
+        * (state.speed_mult1 * state.speed_mult2)
+        + state.speed_mult1;
+}
+
+/// C entry point for [`throw_ball`]: heading in/out, speed out.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_ball_throw(state: *mut ThrowState) {
+    // SAFETY: the C++ wrapper passes a valid, writable state struct.
+    throw_ball(unsafe { &mut *state });
 }
 
 /// C entry point: fills `*distance` with the winning distance and returns the
@@ -219,5 +268,67 @@ mod tests {
             },
             -1
         );
+    }
+
+    #[test]
+    fn a_zero_angle_multiplier_leaves_the_heading_exactly_as_it_was() {
+        // The game's own callers pass 0 for the angle; sin(0)/cos(0) are exact,
+        // so the shear must reproduce the input bits, not merely be close.
+        let mut state = ThrowState {
+            direction: Vector3 {
+                x: 0.6,
+                y: -0.8,
+                z: 2.5,
+            },
+            angle_mult: 0.0,
+            speed_mult1: 40.0,
+            speed_mult2: 0.5,
+            rand_angle: 0.31,
+            rand_speed: 0.75,
+            speed: 0.0,
+        };
+        throw_ball(&mut state);
+        assert_eq!(state.direction.x, 0.6);
+        assert_eq!(state.direction.y, -0.8);
+        // Z never takes part in the rotation.
+        assert_eq!(state.direction.z, 2.5);
+    }
+
+    #[test]
+    fn the_speed_is_the_original_combination_of_both_draws() {
+        let mut state = ThrowState {
+            direction: Vector3::default(),
+            angle_mult: 90.0,
+            speed_mult1: 40.0,
+            speed_mult2: 0.5,
+            rand_angle: 0.5,
+            rand_speed: 0.25,
+            speed: 0.0,
+        };
+        throw_ball(&mut state);
+        // (1 - 0.5) * (40 * 0.5) + 40
+        assert_eq!(state.speed, 0.5 * (40.0 * 0.5) + 40.0);
+    }
+
+    #[test]
+    fn the_abi_throws_through_the_struct() {
+        let mut state = ThrowState {
+            direction: Vector3 {
+                x: 1.0,
+                y: 0.0,
+                z: -3.0,
+            },
+            angle_mult: 0.0,
+            speed_mult1: 10.0,
+            speed_mult2: 1.0,
+            rand_angle: 0.0,
+            rand_speed: 0.0,
+            speed: 0.0,
+        };
+        // SAFETY: a live local is passed.
+        unsafe { scp_ball_throw(&mut state) };
+        // (1 - 0) * (10 * 1) + 10, as the original spells it.
+        assert_eq!(state.speed, 20.0);
+        assert_eq!(state.direction.z, -3.0);
     }
 }

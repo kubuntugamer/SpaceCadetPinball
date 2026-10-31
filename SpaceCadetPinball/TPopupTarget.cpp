@@ -6,7 +6,12 @@
 #include "loader.h"
 #include "render.h"
 #include "timer.h"
+#include "TBall.h"
 #include "TPinballTable.h"
+
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "maths_rust_abi.h"
+#endif
 
 TPopupTarget::TPopupTarget(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, true)
 {
@@ -54,6 +59,40 @@ int TPopupTarget::Message(MessageCode code, float value)
 void TPopupTarget::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
                              TEdgeSegment* edge)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)distance;
+	(void)edge;
+	// The rebound and the tilt branch are the shared response Rust already
+	// resolves for `TCollisionComponent`; this component reacts to a hard hit
+	// alone, which is exactly what the code names -- the soft band and its
+	// floor mean nothing here, because the original only acts when the rebound
+	// beats the threshold.
+	RustCollisionResponse response{};
+	response.Ball.Position = {ball->Position.X, ball->Position.Y};
+	response.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	response.Ball.Speed = ball->Speed;
+	response.NextPosition = {nextPosition->X, nextPosition->Y};
+	response.Direction = {direction->X, direction->Y};
+	response.Elasticity = Elasticity;
+	response.Smoothness = Smoothness;
+	response.Threshold = Threshold;
+	response.Boost = Boost;
+	response.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	auto code = scp_collision_resolve(&response);
+	ball->Position.X = response.Ball.Position.X;
+	ball->Position.Y = response.Ball.Position.Y;
+	ball->Direction.X = response.Ball.Direction.X;
+	ball->Direction.Y = response.Ball.Direction.Y;
+	ball->Speed = response.Ball.Speed;
+
+	if (code == SCP_COLLISION_HARD_HIT)
+	{
+		if (HardHitSoundId)
+			loader::play_sound(HardHitSoundId, this, "TPopupTarget1");
+		Message(MessageCode::TPopupTargetDisable, 0.0);
+		control::handler(MessageCode::ControlCollision, this);
+	}
+#else
 	if (PinballTable->TiltLockFlag)
 	{
 		maths::basic_collision(ball, nextPosition, direction, Elasticity, Smoothness, 1000000000.0, 0.0);
@@ -72,6 +111,7 @@ void TPopupTarget::Collision(TBall* ball, vector2* nextPosition, vector2* direct
 		Message(MessageCode::TPopupTargetDisable, 0.0);
 		control::handler(MessageCode::ControlCollision, this);
 	}
+#endif
 }
 
 void TPopupTarget::TimerExpired(int timerId, void* caller)

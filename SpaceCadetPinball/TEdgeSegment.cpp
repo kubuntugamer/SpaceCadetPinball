@@ -5,6 +5,54 @@
 #include "TCollisionComponent.h"
 #include "TLine.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "wall_rust_abi.h"
+
+namespace
+{
+	// Everything one installation fills: the component the edges belong to, the
+	// offset each line still applies to itself, and the last edge created, which
+	// is what the original returned.
+	struct InstallContext
+	{
+		TCollisionComponent* CollComp;
+		char* ActiveFlag;
+		unsigned int CollisionGroup;
+		size_t WallValue;
+		float Offset;
+		TEdgeSegment* Last;
+	};
+
+	// The instantiation order is the original's: circle first, then its line,
+	// each filed into the grid and pushed before the next primitive arrives.
+	void install_primitive(void* userdata, const RustWallPrimitive* primitive)
+	{
+		auto context = static_cast<InstallContext*>(userdata);
+		if (primitive->Kind == SCP_WALL_CIRCLE)
+		{
+			vector2 center{primitive->X0, primitive->Y0};
+			auto circle = new TCircle(context->CollComp, context->ActiveFlag, context->CollisionGroup,
+			                          &center, primitive->X1);
+			circle->WallValue = reinterpret_cast<void*>(context->WallValue);
+			circle->place_in_grid(&context->CollComp->AABB);
+			context->CollComp->EdgeList.push_back(circle);
+			context->Last = circle;
+		}
+		else
+		{
+			vector2 start{primitive->X0, primitive->Y0}, end{primitive->X1, primitive->Y1};
+			auto line = new TLine(context->CollComp, context->ActiveFlag, context->CollisionGroup,
+			                      start, end);
+			line->WallValue = reinterpret_cast<void*>(context->WallValue);
+			line->Offset(context->Offset);
+			line->place_in_grid(&context->CollComp->AABB);
+			context->CollComp->EdgeList.push_back(line);
+			context->Last = line;
+		}
+	}
+}
+#endif
+
 TEdgeSegment::TEdgeSegment(TCollisionComponent* collComp, char* activeFlag, unsigned collisionGroup)
 {
 	CollisionComponent = collComp;
@@ -20,6 +68,15 @@ void TEdgeSegment::port_draw()
 TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* collComp, char* activeFlagPtr,
                                          unsigned int collisionGroup, float offset, size_t wallValue)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Which edges the attribute describes — the type dispatch, the polyline
+	// indexing with its wrap onto the first point, and the cross-product test
+	// that adds a corner circle — is the builder's; the objects, the grid filing
+	// and the per-line offset stay here, in creation order as before.
+	InstallContext context{collComp, activeFlagPtr, collisionGroup, wallValue, offset, nullptr};
+	scp_wall_install(floatArr, SCP_WALL_FLOAT_CAPACITY, offset, &install_primitive, &context);
+	return context.Last;
+#else
 	vector2 center{}, start{}, end{}, prevCenter{};
 	vector3 vec1{}, vec2{}, dstVec{};
 	TEdgeSegment* edge = nullptr;
@@ -113,4 +170,5 @@ TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* c
 	}
 
 	return edge;
+#endif
 }

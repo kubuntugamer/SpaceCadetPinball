@@ -10,6 +10,10 @@
 #include "TPinballTable.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "field_rust_abi.h"
+#endif
+
 
 TRamp::TRamp(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, false)
 {
@@ -177,9 +181,22 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 
 int TRamp::FieldEffect(TBall* ball, vector2* vecDst)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustRampField field{};
+	field.Force = {ball->RampFieldForce.X, ball->RampFieldForce.Y};
+	field.Ball.Position = {ball->Position.X, ball->Position.Y};
+	field.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	field.Ball.Speed = ball->Speed;
+	field.Mult = BallFieldMult;
+	auto applied = scp_field_ramp(&field);
+	vecDst->X = field.Out.X;
+	vecDst->Y = field.Out.Y;
+	return applied;
+#else
 	vecDst->X = ball->RampFieldForce.X - ball->Direction.X * ball->Speed * BallFieldMult;
 	vecDst->Y = ball->RampFieldForce.Y - ball->Direction.Y * ball->Speed * BallFieldMult;
 	return 1;
+#endif
 }
 
 void TRamp::port_draw()

@@ -14,10 +14,13 @@
 pub mod balls;
 pub mod ballstep;
 pub mod circle_grid;
+pub mod component;
+pub mod field;
 pub mod flipper;
 pub mod grid;
 pub mod proj;
 pub mod stepper;
+pub mod wall;
 pub mod world;
 pub mod world_abi;
 
@@ -538,20 +541,28 @@ pub unsafe extern "C" fn scp_geometry_rotate_point(
     point.y = x_offset * sin + y_offset * cos + origin.y;
 }
 
-/// Rotate a vector by an angle.
+/// Rotate a vector by an angle, in place.
 ///
 /// This reproduces the original engine's in-place ordering exactly, where the
 /// updated X is reused for Y: the function shears rather than rotates. It is
 /// kept verbatim because callers depend on the existing behaviour, and the
-/// disassembly shows the original shipped this way.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn scp_geometry_rotate_vector(vector: *mut Vector2, angle: f32) {
-    // SAFETY: the C++ wrapper passes a writable vector.
-    let vector = unsafe { &mut *vector };
+/// disassembly shows the original shipped this way. Shared with
+/// `balls::throw_ball`, which jitters a launch heading with the same call.
+pub(crate) fn rotate(vector: &mut Vector2, angle: f32) {
     let s = sin_f32(angle);
     let c = cos_f32(angle);
     vector.x = c * vector.x - s * vector.y;
     vector.y = s * vector.x + c * vector.y;
+}
+
+/// Rotate a vector by an angle.
+///
+/// See [`rotate`] for why the shear ordering is kept.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_geometry_rotate_vector(vector: *mut Vector2, angle: f32) {
+    // SAFETY: the C++ wrapper passes a writable vector.
+    let vector = unsafe { &mut *vector };
+    rotate(vector, angle);
 }
 
 /// Resolve a ball collision against a wall or other edge.

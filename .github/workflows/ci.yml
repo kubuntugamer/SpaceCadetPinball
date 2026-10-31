@@ -49,8 +49,26 @@ jobs:
       - name: Compare the Rust flipper geometry against the C++ reference
         run: ./bin/flipper_parity
 
+      - name: Compare the Rust flipper collision response against the C++ reference
+        run: ./bin/flipper_collision_parity
+
       - name: Compare the Rust circle box-filling against the C++ reference
         run: ./bin/circlegrid_parity
+
+      - name: Compare the Rust rectangle box-filling against the C++ reference
+        run: ./bin/squaregrid_parity
+
+      - name: Compare the Rust component collision response against the C++ reference
+        run: ./bin/component_collision_parity
+
+      - name: Compare the Rust field forces against the C++ reference
+        run: ./bin/field_parity
+
+      - name: Compare the Rust ball throw against the C++ reference
+        run: ./bin/throwball_parity
+
+      - name: Compare the Rust wall builder against the C++ reference
+        run: ./bin/installwall_parity
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

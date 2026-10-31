@@ -3,6 +3,8 @@
 
 #ifdef SCP_USE_RUST_GEOMETRY
 #include "circle_grid_abi.h"
+#include "field_rust_abi.h"
+#include "grid_rust_abi.h"
 #endif
 
 
@@ -114,15 +116,54 @@ TTableLayer::~TTableLayer()
 
 int TTableLayer::FieldEffect(TBall* ball, vector2* vecDst)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// The arithmetic is Rust's; the random draw is this host's, because the CRT
+	// sequence it comes from is not something the port may reimplement.
+	RustGravityField field{};
+	field.DirX = GraityDirX;
+	field.DirY = GraityDirY;
+	field.Mult = GraityMult;
+	field.Rand = RandFloat();
+	field.Ball.Position = {ball->Position.X, ball->Position.Y};
+	field.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	field.Ball.Speed = ball->Speed;
+	auto applied = scp_field_gravity(&field);
+	vecDst->X = field.Out.X;
+	vecDst->Y = field.Out.Y;
+	return applied;
+#else
 	vecDst->X = GraityDirX - (0.5f - RandFloat() + ball->Direction.X) *
 		ball->Speed * GraityMult;
 	vecDst->Y = GraityDirY - ball->Direction.Y * ball->Speed * GraityMult;
 	return 1;
+#endif
 }
 
 void TTableLayer::edges_insert_square(float y0, float x0, float y1, float x1, TEdgeSegment* edge,
                                       field_effect_type* field)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Which boxes a rectangle reaches is the grid's decision, same as the circle
+	// and segment fills; filling them stays here, because they are this
+	// manager's boxes.
+	struct InsertContext
+	{
+		TEdgeSegment* Edge;
+		field_effect_type* Field;
+	} context{edge, field};
+
+	RustGrid grid{edge_manager->MinX, edge_manager->MinY, edge_manager->AdvanceX, edge_manager->AdvanceY,
+	              edge_manager->MaxBoxX, edge_manager->MaxBoxY};
+
+	scp_grid_insert_square(&grid, y0, x0, y1, x1, [](void* userdata, int32_t x, int32_t y)
+	{
+		auto owner = static_cast<InsertContext*>(userdata);
+		if (owner->Edge)
+			edge_manager->add_edge_to_box(x, y, owner->Edge);
+		if (owner->Field)
+			edge_manager->add_field_to_box(x, y, owner->Field);
+	}, &context);
+#else
 	float widthM = static_cast<float>(static_cast<int>(edge_manager->AdvanceX * 0.001f)); // Sic
 	float heightM = static_cast<float>(static_cast<int>(edge_manager->AdvanceY * 0.001f));
 	float xMin = x0 - widthM;
@@ -157,6 +198,7 @@ void TTableLayer::edges_insert_square(float y0, float x0, float y1, float x1, TE
 		}
 		boxX += edge_manager->AdvanceX;
 	}
+#endif
 }
 
 void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, field_effect_type* field)

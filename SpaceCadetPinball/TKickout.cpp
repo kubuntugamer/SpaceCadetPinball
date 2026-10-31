@@ -11,6 +11,10 @@
 #include "TPinballTable.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "field_rust_abi.h"
+#endif
+
 TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollisionComponent(
 	table, groupIndex, false)
 {
@@ -127,6 +131,26 @@ void TKickout::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 
 int TKickout::FieldEffect(TBall* ball, vector2* dstVec)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Answers only for a ball inside the circle the kickout does not already
+	// hold; a zero answer leaves the caller's accumulator alone, so the output
+	// is copied back only when the field applies.
+	RustKickoutField field{};
+	field.Center = {Circle.Center.X, Circle.Center.Y};
+	field.RadiusSq = Circle.RadiusSq;
+	field.Mult = FieldMult;
+	field.Captured = BallCaputeredFlag ? 1 : 0;
+	field.Ball.Position = {ball->Position.X, ball->Position.Y};
+	field.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	field.Ball.Speed = ball->Speed;
+	auto applied = scp_field_kickout(&field);
+	if (applied)
+	{
+		dstVec->X = field.Out.X;
+		dstVec->Y = field.Out.Y;
+	}
+	return applied;
+#else
 	vector2 direction{};
 
 	if (BallCaputeredFlag)
@@ -139,6 +163,7 @@ int TKickout::FieldEffect(TBall* ball, vector2* dstVec)
 	dstVec->X = direction.X * FieldMult - ball->Direction.X * ball->Speed;
 	dstVec->Y = direction.Y * FieldMult - ball->Direction.Y * ball->Speed;
 	return 1;
+#endif
 }
 
 void TKickout::TimerExpired(int timerId, void* caller)

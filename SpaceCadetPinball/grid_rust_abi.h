@@ -38,4 +38,11 @@ extern "C"
 	// Writes the ordered box indices the segment spans, return the count written.
 	size_t scp_grid_walk_segment(const RustGrid* grid, float x0, float y0, float x1, float y1, int32_t* output,
 	                             size_t capacity);
+
+	// Reports every box the rectangle reaches, in insertion order, and returns
+	// the count. Bounds are `TTableLayer::edges_insert_square`'s parameter order
+	// (y0, x0, y1, x1). The callback may only record the box it is given; it may
+	// not call back into the grid.
+	int32_t scp_grid_insert_square(const RustGrid* grid, float y0, float x0, float y1, float x1,
+	                               void (*callback)(void* userdata, int32_t x, int32_t y), void* userdata);
 }

@@ -168,8 +168,56 @@ struct RustFlipperCollision
 	int32_t FlipperFlag;
 };
 
+// Everything `TCollisionComponent::Collision` and `::DefaultCollision` read,
+// with the ball resolved in place. The component's sound ids stay on the C++
+// side: Rust classifies the hit and the host plays the sound it names.
+struct RustCollisionResponse
+{
+	// In/out: the ball being hit.
+	RustBallState Ball;
+	// In: the contact point and collision direction from the distance query.
+	RustVector2 NextPosition;
+	RustVector2 Direction;
+	// In: the component's own response scalars.
+	float Elasticity;
+	float Smoothness;
+	float Threshold;
+	float Boost;
+	// In: `PinballTable->TiltLockFlag`.
+	int32_t Tilt;
+};
+
+// Event codes `scp_collision_resolve` returns; the host plays the sound the
+// code names. `SOFT_HIT` is the rebound above 0.2, `HARD_HIT` above Threshold.
+#define SCP_COLLISION_NONE 0
+#define SCP_COLLISION_SOFT_HIT 1
+#define SCP_COLLISION_HARD_HIT 2
+
+// Everything `TBall::throw_ball` computes: the heading in/out, the caller's
+// multipliers, the host's two RandFloat() draws, and the speed back.
+struct RustThrowBall
+{
+	// In/out: the launch heading; only X and Y are rotated.
+	RustVector3 Direction;
+	// In: angle and speed multipliers, plus the host's draws for each.
+	float AngleMult;
+	float SpeedMult1;
+	float SpeedMult2;
+	float RandAngle;
+	float RandSpeed;
+	// Out: the ball's new speed.
+	float Speed;
+};
+
 extern "C"
 {
+	// Resolve one collision, writing the ball back through the struct; returns
+	// one of the SCP_COLLISION_* codes above.
+	int32_t scp_collision_resolve(RustCollisionResponse* state);
+
+	// Apply the launch jitter: rotate Direction's X/Y, derive Speed.
+	void scp_ball_throw(RustThrowBall* state);
+
 	void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
 	int32_t scp_geometry_rectangle_clip(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
 	float scp_geometry_ray_intersect_circle(const RustRay* ray, const RustCircle* circle);

@@ -201,6 +201,80 @@ pub fn walk_segment(grid: &Grid, x0: f32, y0: f32, x1: f32, y1: f32, output: &mu
     walk_boxes(grid, x0, y0, x1, y1, output)
 }
 
+/// Emits every box the rectangle reaches, in insertion order.
+///
+/// Ported from `TTableLayer::edges_insert_square`, the last box-membership
+/// decision that was still the C++ grid's: circles go through
+/// `circle_grid::insert_circle` and segments through [`walk_boxes`], so this
+/// completes the set. Parameter order is the original's (`y0, x0, y1, x1`),
+/// because the callers are the three sites that already spell it that way, and
+/// the margin quirk is kept: the half-percent pad is truncated to whole units,
+/// which is zero on the engine's normal grid and only ever non-zero on a grid
+/// whose boxes are 1000 units wide or more.
+pub fn insert_square<F: FnMut(i32, i32)>(grid: &Grid, y0: f32, x0: f32, y1: f32, x1: f32, mut emit: F) {
+    let width_m = ((grid.advance_x * 0.001f32) as i32) as f32; // Sic, as the original says.
+    let height_m = ((grid.advance_y * 0.001f32) as i32) as f32;
+
+    let x_min = x0 - width_m;
+    let x_max = x1 + width_m;
+    let y_min = y0 - height_m;
+    let y_max = y1 + height_m;
+
+    let x_min_box = grid.box_x(x_min);
+    let y_min_box = grid.box_y(y_min);
+    let x_max_box = grid.box_x(x_max);
+    let y_max_box = grid.box_y(y_max);
+
+    let mut box_x = x_min_box as f32 * grid.advance_x + grid.min_x;
+    for index_x in x_min_box..=x_max_box {
+        let mut box_y = y_min_box as f32 * grid.advance_y + grid.min_y;
+        for index_y in y_min_box..=y_max_box {
+            if x_max >= box_x
+                && x_min <= box_x + grid.advance_x
+                && y_max >= box_y
+                && y_min <= box_y + grid.advance_y
+            {
+                emit(index_x, index_y);
+            }
+            box_y += grid.advance_y;
+        }
+        box_x += grid.advance_x;
+    }
+}
+
+/// Reports every box the rectangle reaches, in insertion order. Returns the
+/// number reported. Bounds are the original's `y0, x0, y1, x1` order.
+///
+/// `callback` may only record the box it is given; it may not call back into
+/// the grid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_grid_insert_square(
+    grid: *const Grid,
+    y0: f32,
+    x0: f32,
+    y1: f32,
+    x1: f32,
+    callback: Option<unsafe extern "C" fn(*mut core::ffi::c_void, i32, i32)>,
+    userdata: *mut core::ffi::c_void,
+) -> i32 {
+    if grid.is_null() {
+        return 0;
+    }
+    let Some(callback) = callback else {
+        return 0;
+    };
+
+    let mut count = 0i32;
+    // SAFETY: the engine passes a live grid; the closure only writes the count.
+    unsafe {
+        insert_square(&*grid, y0, x0, y1, x1, |x, y| {
+            count += 1;
+            callback(userdata, x, y);
+        });
+    }
+    count
+}
+
 /// Fill `output` with the ordered box indices a wall segment spans.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn scp_grid_walk_segment(
@@ -282,6 +356,93 @@ mod tests {
             let (dx, dy) = (pair[1] % 10 - pair[0] % 10, pair[1] / 10 - pair[0] / 10);
             assert!(dx.abs() <= 1 && dy.abs() <= 1 && (dx != 0 || dy != 0));
         }
+    }
+
+    fn square(grid: &Grid, y0: f32, x0: f32, y1: f32, x1: f32) -> Vec<(i32, i32)> {
+        let mut out = Vec::new();
+        insert_square(grid, y0, x0, y1, x1, |x, y| out.push((x, y)));
+        out
+    }
+
+    #[test]
+    fn a_small_rectangle_stays_in_one_box() {
+        let g = grid();
+        // The engine's own margin is zero: AdvanceX * 0.001 truncates to it.
+        // (-10, -10) lands in column 4 (475 / 97) and row 7 (310 / 42.67).
+        let found = square(&g, -10.0, -10.0, -9.0, -9.0);
+        assert_eq!(found, vec![(4, 7)], "{found:?}");
+    }
+
+    #[test]
+    fn a_rectangle_spanning_the_grid_visits_every_covered_box_in_order() {
+        let g = grid();
+        let found = square(&g, g.min_y, g.min_x, g.min_y + g.advance_y * 2.5, g.min_x + g.advance_x * 3.5);
+        assert_eq!(
+            found,
+            vec![(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2), (3, 0), (3, 1),
+                 (3, 2)],
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn rectangles_reaching_past_the_grid_stay_in_range_and_one_far_outside_emits_nothing() {
+        let g = grid();
+        // A rectangle straddling the left edge clamps to column 0, and the
+        // overlap test against that box's own span decides it still counts.
+        let straddling = square(&g, -100.0, -600.0, -50.0, -470.0);
+        assert!(!straddling.is_empty(), "{straddling:?}");
+        for (x, y) in &straddling {
+            assert!((0..g.max_box_x).contains(x) && (0..g.max_box_y).contains(y), "{straddling:?}");
+        }
+
+        // A rectangle entirely off the grid lands in the clamped corner box but
+        // fails that box's overlap test, so it emits nothing.
+        let outside = square(&g, -1000.0, -1000.0, -999.0, -999.0);
+        assert!(outside.is_empty(), "{outside:?}");
+    }
+
+    #[test]
+    fn the_margin_is_truncated_to_whole_units() {
+        // AdvanceX * 0.001 = 2.4, truncated to 2: the pad is what pushes a
+        // rectangle's far edge into the neighbouring box, so the truncation has
+        // to survive the port. Without the pad, (2398, 2398.5) would sit in
+        // column 0 alone.
+        let g = Grid {
+            min_x: 0.0,
+            min_y: 0.0,
+            advance_x: 2400.0,
+            advance_y: 2400.0,
+            max_box_x: 4,
+            max_box_y: 4,
+        };
+        let found = square(&g, 2398.0, 2398.0, 2398.5, 2398.5);
+        assert_eq!(found, vec![(0, 0), (0, 1), (1, 0), (1, 1)], "{found:?}");
+    }
+
+    #[test]
+    fn the_abi_counts_and_forwards_every_box_of_a_square() {
+        static CALLS: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(0);
+        unsafe extern "C" fn count(_userdata: *mut core::ffi::c_void, x: i32, y: i32) {
+            assert!(x >= 0 && y >= 0);
+            CALLS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        }
+
+        let g = grid();
+        CALLS.store(0, core::sync::atomic::Ordering::Relaxed);
+        // SAFETY: a live grid and a non-null callback are passed.
+        let reported = unsafe {
+            scp_grid_insert_square(&g, g.min_y, g.min_x, g.min_y + g.advance_y * 3.5, g.min_x + g.advance_x * 3.5,
+                                   Some(count), core::ptr::null_mut())
+        };
+        assert_eq!(reported, CALLS.load(core::sync::atomic::Ordering::Relaxed));
+        assert!(reported >= 12, "expected the full 4x4 span, got {reported}");
+
+        // SAFETY: a null grid is rejected rather than dereferenced.
+        assert_eq!(
+            unsafe { scp_grid_insert_square(core::ptr::null(), 0.0, 0.0, 1.0, 1.0, Some(count), core::ptr::null_mut()) },
+            0
+        );
     }
 
     #[test]

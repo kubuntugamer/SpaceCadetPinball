@@ -3,6 +3,7 @@
 
 
 #include "control.h"
+#include "field_rust_abi.h"
 #include "loader.h"
 #include "pb.h"
 #include "TBall.h"
@@ -99,6 +100,50 @@ void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 
 int THole::FieldEffect(TBall* ball, vector2* vecDst)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Stage one pulls a free ball toward the centre, like the kickout's
+	// suction. Stage two, armed by the capture timer, drops the ball down Z;
+	// the frame it reaches the set height the Rust side clamps it and reports
+	// the release, and the host reacts with the sound and the reset.
+	RustHoleField field{};
+	field.Center = {Circle.Center.X, Circle.Center.Y};
+	field.RadiusSq = Circle.RadiusSq;
+	field.GravityPull = GravityPull;
+	field.GravityMult = GravityMult;
+	field.GravityDirVectMult = PinballTable->GravityDirVectMult;
+	field.ZSetValue = ZSetValue;
+	field.Captured = BallCapturedFlag ? 1 : 0;
+	field.SecondStage = BallCapturedSecondStage ? 1 : 0;
+	field.Ball.Position = {ball->Position.X, ball->Position.Y};
+	field.Ball.Direction = {ball->Direction.X, ball->Direction.Y};
+	field.Ball.Speed = ball->Speed;
+	field.BallZ = ball->Position.Z;
+	field.BallDirZ = ball->Direction.Z;
+	field.TimeDelta = ball->TimeDelta;
+
+	auto outcome = scp_field_hole(&field);
+
+	ball->Direction.Z = field.BallDirZ;
+	ball->Position.Z = field.BallZ;
+	if (outcome == 2)
+	{
+		BallCapturedFlag = false;
+		BallCapturedSecondStage = false;
+		ball->Position.Z = ZSetValue;
+		ball->CollisionMask = CollisionMask;
+		ball->CollisionComp = nullptr;
+		ball->Direction = {};
+		ball->Speed = 0.0f;
+		loader::play_sound(SoftHitSoundId, ball, "THole2");
+		control::handler(MessageCode::ControlBallReleased, this);
+	}
+	if (outcome == 1)
+	{
+		vecDst->X = field.Out.X;
+		vecDst->Y = field.Out.Y;
+	}
+	return outcome == 1 ? 1 : 0;
+#else
 	int result;
 	vector2 direction{};
 
@@ -140,6 +185,7 @@ int THole::FieldEffect(TBall* ball, vector2* vecDst)
 		}
 	}
 	return result;
+#endif
 }
 
 void THole::TimerExpired(int timerId, void* caller)
