@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.2" date="2026-10-30">
+            <description>
+                <p>The per-frame ball integration moved to the Rust geometry crate, verified bit-identical to the code it replaced.</p>
+            </description>
+        </release>
         <release version="2.6.1" date="2026-10-30">
             <description>
                 <p>Ball-versus-ball collision selection moved to the Rust maths layer; optional ball tracing for physics comparisons.</p>
