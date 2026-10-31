@@ -49,6 +49,9 @@ jobs:
       - name: Compare the Rust flipper geometry against the C++ reference
         run: ./bin/flipper_parity
 
+      - name: Compare the Rust circle box-filling against the C++ reference
+        run: ./bin/circlegrid_parity
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "circle_grid_abi.h"
+#endif
+
 
 #include "fullscrn.h"
 #include "loader.h"
@@ -157,6 +161,29 @@ void TTableLayer::edges_insert_square(float y0, float x0, float y1, float x1, TE
 
 void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, field_effect_type* field)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Which boxes a circle reaches is the grid's decision; filling them stays
+	// here, because they are this manager's boxes.
+	struct InsertContext
+	{
+		TEdgeSegment* Edge;
+		field_effect_type* Field;
+	} context{edge, field};
+
+	RustCircleGrid grid{edge_manager->MinX, edge_manager->MinY, edge_manager->AdvanceX,
+	                     edge_manager->AdvanceY, edge_manager->MaxBoxX, edge_manager->MaxBoxY};
+	RustCircle rustCircle{{circle->Center.X, circle->Center.Y}, circle->RadiusSq};
+
+	scp_grid_insert_circle(&grid, &rustCircle, [](void* userdata, int32_t x, int32_t y)
+	{
+		auto owner = static_cast<InsertContext*>(userdata);
+		if (owner->Edge)
+			edge_manager->add_edge_to_box(x, y, owner->Edge);
+		if (owner->Field)
+			edge_manager->add_field_to_box(x, y, owner->Field);
+	}, &context);
+	return;
+#else
 	ray_type ray{};
 	vector2 vec1{};
 
@@ -277,4 +304,5 @@ void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, f
 		}
 		vec1.X += edge_manager->AdvanceX;
 	}
+#endif
 }

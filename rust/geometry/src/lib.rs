@@ -13,6 +13,7 @@
 
 pub mod balls;
 pub mod ballstep;
+pub mod circle_grid;
 pub mod flipper;
 pub mod grid;
 pub mod proj;
