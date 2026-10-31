@@ -114,6 +114,32 @@ struct RustBallAdvance
 	int32_t Steps;
 };
 
+// The flipper's collision shape at zero rotation, its centre and the angle it is
+// drawn at: in come the sources and the sin/cos pair, out come the rotated
+// control points, both lines and both circles.
+struct RustFlipperPoints
+{
+	RustVector2 A1Src;
+	RustVector2 A2Src;
+	RustVector2 B1Src;
+	RustVector2 B2Src;
+	RustVector2 T1Src;
+	RustVector2 RotOrigin;
+	float CircleBaseRadiusSq;
+	float CircleT1RadiusSq;
+	float Sin;
+	float Cos;
+	RustVector2 A1;
+	RustVector2 A2;
+	RustVector2 B1;
+	RustVector2 B2;
+	RustVector2 T1;
+	RustLine LineA;
+	RustLine LineB;
+	RustCircle CircleBase;
+	RustCircle CircleT1;
+};
+
 extern "C"
 {
 	void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
@@ -122,6 +148,11 @@ extern "C"
 	int32_t scp_geometry_nearest_ball(const RustRay* ray, const RustBallSphere* spheres, size_t count,
 	                                  size_t skip, float span, float* distance);
 	void scp_ball_advance(RustBallAdvance* state);
+	void scp_flipper_set_control_points(RustFlipperPoints* state);
+	float scp_flipper_angle_delta(float moveSpeed, float timeDelta, float angleRemainder, float angleDst,
+	                              float currentAngle, int32_t flipperIdle);
+	int32_t scp_flipper_step_angle(int32_t hasMessage, float deltaAngle, float distanceDiv,
+	                               float invT1Radius, float* dst);
 	float scp_geometry_normalize_2d(RustVector2* vector);
 	void scp_geometry_line_init(RustLine* line, float x0, float y0, float x1, float y1);
 	float scp_geometry_ray_intersect_line(const RustRay* ray, RustLine* line);

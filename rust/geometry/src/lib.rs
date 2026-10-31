@@ -13,6 +13,7 @@
 
 pub mod balls;
 pub mod ballstep;
+pub mod flipper;
 pub mod grid;
 pub mod proj;
 pub mod stepper;

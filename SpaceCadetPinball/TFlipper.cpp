@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "TFlipper.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "maths_rust_abi.h"
+#endif
+
 
 #include "control.h"
 #include "loader.h"
@@ -131,6 +135,9 @@ int TFlipper::GetFlipperStepAngle(float dt, float* dst) const
 		return 0;
 
 	auto deltaAngle = FlipperEdge->flipper_angle_delta(dt);
+#ifdef SCP_USE_RUST_GEOMETRY
+	return scp_flipper_step_angle(1, deltaAngle, FlipperEdge->DistanceDiv, FlipperEdge->InvT1Radius, dst);
+#else
 	auto step = std::fabs(std::ceil(FlipperEdge->DistanceDiv * deltaAngle * FlipperEdge->InvT1Radius));
 	if (step > 3.0f)
 		step = 3.0f;
@@ -142,6 +149,7 @@ int TFlipper::GetFlipperStepAngle(float dt, float* dst) const
 
 	*dst = deltaAngle;
 	return 1;
+#endif
 }
 
 void TFlipper::FlipperCollision(float deltaAngle)

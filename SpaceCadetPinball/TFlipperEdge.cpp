@@ -1,6 +1,11 @@
 #include "pch.h"
 #include "TFlipperEdge.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "maths_rust_abi.h"
+#include <cstring>
+#endif
+
 
 #include "pb.h"
 #include "TLine.h"
@@ -216,6 +221,42 @@ void TFlipperEdge::set_control_points(float angle)
 {
 	float sin, cos;
 	maths::SinCos(angle, sin, cos);
+
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Copies the sources, rotates each about the origin, rebuilds both lines and
+	// both circles — the sequence that defines the flipper's collision shape.
+	static_assert(sizeof(line_type) == sizeof(RustLine), "line layout drift");
+	static_assert(sizeof(circle_type) == sizeof(RustCircle), "circle layout drift");
+
+	RustFlipperPoints state{};
+	state.A1Src = {A1Src.X, A1Src.Y};
+	state.A2Src = {A2Src.X, A2Src.Y};
+	state.B1Src = {B1Src.X, B1Src.Y};
+	state.B2Src = {B2Src.X, B2Src.Y};
+	state.T1Src = {T1Src.X, T1Src.Y};
+	state.RotOrigin = {RotOrigin.X, RotOrigin.Y};
+	state.CircleBaseRadiusSq = CirclebaseRadiusSq;
+	state.CircleT1RadiusSq = CircleT1RadiusSq;
+	state.Sin = sin;
+	state.Cos = cos;
+	std::memcpy(&state.LineA, &LineA, sizeof state.LineA);
+	std::memcpy(&state.LineB, &LineB, sizeof state.LineB);
+	std::memcpy(&state.CircleBase, &circlebase, sizeof state.CircleBase);
+	std::memcpy(&state.CircleT1, &circleT1, sizeof state.CircleT1);
+
+	scp_flipper_set_control_points(&state);
+
+	A1 = {state.A1.X, state.A1.Y};
+	A2 = {state.A2.X, state.A2.Y};
+	B1 = {state.B1.X, state.B1.Y};
+	B2 = {state.B2.X, state.B2.Y};
+	T1 = {state.T1.X, state.T1.Y};
+	std::memcpy(&LineA, &state.LineA, sizeof LineA);
+	std::memcpy(&LineB, &state.LineB, sizeof LineB);
+	std::memcpy(&circlebase, &state.CircleBase, sizeof circlebase);
+	std::memcpy(&circleT1, &state.CircleT1, sizeof circleT1);
+	ControlPointDirtyFlag = false;
+#else
 	A1 = A1Src;
 	A2 = A2Src;
 	B1 = B1Src;
@@ -231,10 +272,15 @@ void TFlipperEdge::set_control_points(float angle)
 	circlebase = {RotOrigin, CirclebaseRadiusSq};
 	circleT1 = {T1, CircleT1RadiusSq};
 	ControlPointDirtyFlag = false;
+#endif
 }
 
 float TFlipperEdge::flipper_angle_delta(float timeDelta)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	return scp_flipper_angle_delta(MoveSpeed, timeDelta, AngleRemainder, AngleDst, CurrentAngle,
+	                               FlipperFlag == MessageCode::TFlipperNull ? 1 : 0);
+#else
 	if (FlipperFlag == MessageCode::TFlipperNull)
 		return 0.0f;
 
@@ -242,6 +288,7 @@ float TFlipperEdge::flipper_angle_delta(float timeDelta)
 	if (std::fabs(deltaAngle) > AngleRemainder)
 		return AngleDst - CurrentAngle;
 	return deltaAngle;
+#endif
 }
 
 int TFlipperEdge::SetMotion(MessageCode code)

@@ -11,6 +11,10 @@ below concerns them.
 
 ## [Unreleased]
 
+### Changed
+
+* The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
+
 ## [2.6.3] - 2026-10-31
 
 ### Changed
