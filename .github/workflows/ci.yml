@@ -68,6 +68,12 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpaceCadetPinball-linux-x86_64-rust-world
+          path: bin/SpaceCadetPinball
+
   windows:
     name: Windows (x64)
     runs-on: windows-latest

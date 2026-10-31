@@ -11,6 +11,10 @@ below concerns them.
 
 ## [Unreleased]
 
+### Changed
+
+* Build option `SCP_USE_RUST_WORLD` (off by default) hands collision box membership, the ray walk and the per-query visited marks to the Rust world in `rust/geometry`; edges keep their C++ collision maths and register a distance callback. Default builds are unchanged.
+
 ## [2.5.0] - 2026-10-30
 
 ### Added
