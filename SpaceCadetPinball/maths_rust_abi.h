@@ -87,11 +87,24 @@ struct RustBallState
 	float Speed;
 };
 
+// One ball as `pb::BallToBallCollision` sees it: position, radius and the two
+// flags the original reads.
+struct RustBallSphere
+{
+	float X;
+	float Y;
+	float Radius;
+	int32_t Active;
+	int32_t CollisionMask;
+};
+
 extern "C"
 {
 	void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
 	int32_t scp_geometry_rectangle_clip(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
 	float scp_geometry_ray_intersect_circle(const RustRay* ray, const RustCircle* circle);
+	int32_t scp_geometry_nearest_ball(const RustRay* ray, const RustBallSphere* spheres, size_t count,
+	                                  size_t skip, float span, float* distance);
 	float scp_geometry_normalize_2d(RustVector2* vector);
 	void scp_geometry_line_init(RustLine* line, float x0, float y0, float x1, float y1);
 	float scp_geometry_ray_intersect_line(const RustRay* ray, RustLine* line);

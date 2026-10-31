@@ -18,6 +18,10 @@
 #include "winmain.h"
 #include "Sound.h"
 #include "TBall.h"
+
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "maths_rust_abi.h"
+#endif
 #include "TDemo.h"
 #include "TEdgeSegment.h"
 #include "TLightGroup.h"
@@ -789,6 +793,47 @@ void pb::ShowMessageBox(MessageBoxIcon icon, LPCSTR title, LPCSTR message)
 
 float pb::BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// The walk itself is rust/geometry's; only the winning index is looked up in
+	// the list the original walked, so `edge` still comes back a TBall*.
+	auto& balls = MainTable->BallList;
+	if (balls.size() <= 32)
+	{
+		RustBallSphere spheres[32];
+		auto skip = static_cast<size_t>(-1);
+		for (size_t index = 0; index < balls.size(); ++index)
+		{
+			auto curBall = balls[index];
+			spheres[index].X = curBall->Position.X;
+			spheres[index].Y = curBall->Position.Y;
+			spheres[index].Radius = curBall->Radius;
+			spheres[index].Active = curBall->ActiveFlag;
+			spheres[index].CollisionMask = curBall->CollisionMask;
+			if (curBall == &ball)
+				skip = index;
+		}
+
+		RustRay query{};
+		query.Origin.X = ray.Origin.X;
+		query.Origin.Y = ray.Origin.Y;
+		query.Direction.X = ray.Direction.X;
+		query.Direction.Y = ray.Direction.Y;
+		query.MaxDistance = ray.MaxDistance;
+		query.MinDistance = ray.MinDistance;
+		query.CollisionMask = ray.CollisionMask;
+
+		auto distance = collisionDistance;
+		auto winner = scp_geometry_nearest_ball(&query, spheres, balls.size(), skip, BallToBallCollisionDistance,
+		                                       &distance);
+		if (winner >= 0 && distance < collisionDistance)
+		{
+			*edge = balls[static_cast<size_t>(winner)];
+			return distance;
+		}
+		return collisionDistance;
+	}
+#endif
+
 	for (const auto curBall : MainTable->BallList)
 	{
 		if (curBall->ActiveFlag && curBall != &ball && (curBall->CollisionMask & ball.CollisionMask) != 0 &&
