@@ -11,6 +11,13 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-10-30
+
+### Fixed
+
+* Fullscreen opened on the wrong monitor in a multi-monitor setup. `glfwGetPrimaryMonitor()` reports the backend's primary output, not the display the window is on, so a second display (below or beside the first) received the fullscreen window. The monitor is now the one showing most of the window, with the primary kept only as the fallback for a window that is off every display. Leaving fullscreen still returns the window to where it was.
+* On Wayland the game cannot read the window's position (GLFW reports every window at the origin), so there the choice resolves to the display containing the screen origin rather than the window's own display; Windows, macOS and X11 follow the window exactly.
+
 ## [2.4.1] - 2026-10-30
 
 ### Fixed
