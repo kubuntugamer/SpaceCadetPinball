@@ -11,6 +11,14 @@ below concerns them.
 
 ## [Unreleased]
 
+### Added
+
+* `SCP_TRACE=<file>` writes one line of ball state per frame (position, direction, speed, activeness) so a recorded session can be replayed against a ported physics loop. Off unless the variable is set.
+
+### Changed
+
+* Ball-versus-ball collision selection runs in the Rust maths layer; ordering, tie-breaking and the 0.002 skin are unchanged.
+
 ## [2.6.0] - 2026-10-30
 
 ### Changed

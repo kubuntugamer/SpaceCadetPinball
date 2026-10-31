@@ -50,6 +50,8 @@ public:
 	static void ballset(float dx, float dy);
 	static void frame(float dtMilliSec);
 	static void timed_frame(float timeDelta);
+	// Appends one line of ball state per frame when SCP_TRACE names a file.
+	static void trace_balls();
 	static void pause_continue();
 	static void loose_focus();
 	static void InputUp(GameInput input);

@@ -488,6 +488,40 @@ void pb::timed_frame(float timeDelta)
 		if (ball->ActiveFlag)
 			ball->Repaint();
 	}
+
+	trace_balls();
+}
+
+void pb::trace_balls()
+{
+	// A recorded run is the only way to diff a ported physics loop against the
+	// original later: the table data the game reads is not in the tree, so the
+	// trace has to come from a real session. One line per frame, one field per ball
+	// in BallList order, which is also the order collisions are resolved in.
+	static FILE* trace = nullptr;
+	static bool opened = false;
+	if (!opened)
+	{
+		opened = true;
+		auto path = std::getenv("SCP_TRACE");
+		if (path && *path)
+		{
+			trace = std::fopen(path, "w");
+			if (trace)
+				std::fprintf(trace, "# scp ball trace: time_ticks, then per ball active x y dx dy speed\n");
+		}
+	}
+
+	if (!trace || !MainTable)
+		return;
+
+	std::fprintf(trace, "F %d", time_ticks);
+	for (auto ball : MainTable->BallList)
+	{
+		std::fprintf(trace, " %d %.9g %.9g %.9g %.9g %.9g", ball->ActiveFlag ? 1 : 0, ball->Position.X,
+		             ball->Position.Y, ball->Direction.X, ball->Direction.Y, ball->Speed);
+	}
+	std::fputc('\n', trace);
 }
 
 void pb::pause_continue()
