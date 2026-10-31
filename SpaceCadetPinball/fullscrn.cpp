@@ -2,6 +2,7 @@
 #include "fullscrn.h"
 
 
+#include "monitor_select.h"
 #include "options.h"
 #include "pb.h"
 #include "render.h"
@@ -63,7 +64,8 @@ int fullscrn::enableFullscreen()
 		glfwGetWindowPos(winmain::MainWindow, &savedWindowX, &savedWindowY);
 		glfwGetWindowSize(winmain::MainWindow, &savedWindowW, &savedWindowH);
 
-		auto monitor = glfwGetPrimaryMonitor();
+		// The display the window is on, not the backend's primary display.
+		auto monitor = monitor_showing_rect(savedWindowX, savedWindowY, savedWindowW, savedWindowH);
 		if (monitor)
 		{
 			const GLFWvidmode* mode = glfwGetVideoMode(monitor);
