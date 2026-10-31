@@ -15,6 +15,12 @@ below concerns them.
 
 * The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
 
+## [2.6.7] - 2026-10-31
+
+### Changed
+
+* The flipper's collision response — `TFlipperEdge::EdgeCollision`, the last gameplay-critical flipper routine still in C++ — is computed in the Rust geometry crate. It decides a front-vs-back hit from the cross product of the origin-to-tip and origin-to-contact vectors, inverts that on retract, and either boosts the ball off the leading face or bleeds speed off the trailing one, composing the existing Rust `basic_collision` throughout. The engine hands the whole response over in one `#[repr(C)]` struct and reads only the ball back; `flipper_collision_parity` runs the pre-port body beside it over 20,000 randomized cases across idle/extend/retract and both collision signs, bit for bit. Flippers are now fully ported: control points, stepping, angle delta, distance maths and collision response.
+
 ## [2.6.6] - 2026-10-31
 
 ### Changed

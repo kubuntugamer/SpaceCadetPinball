@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.7" date="2026-10-31">
+            <description>
+                <p>The flipper's collision response is now computed in the Rust geometry crate; flippers are fully ported and gameplay is unchanged.</p>
+            </description>
+        </release>
         <release version="2.6.6" date="2026-10-31">
             <description>
                 <p>Table walls and bumpers hand their geometry to the Rust collision world, which now answers every collision cast itself; gameplay is unchanged.</p>
