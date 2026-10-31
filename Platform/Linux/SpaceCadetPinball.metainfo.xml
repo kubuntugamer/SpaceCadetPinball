@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.1" date="2026-10-30">
+            <description>
+                <p>Ball-versus-ball collision selection moved to the Rust maths layer; optional ball tracing for physics comparisons.</p>
+            </description>
+        </release>
         <release version="2.6.0" date="2026-10-30">
             <description>
                 <p>Collision box membership and the ray walk moved to the Rust geometry crate; gameplay is unchanged.</p>

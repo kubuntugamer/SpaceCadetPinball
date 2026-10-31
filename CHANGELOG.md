@@ -11,6 +11,8 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-10-30
+
 ### Added
 
 * `SCP_TRACE=<file>` writes one line of ball state per frame (position, direction, speed, activeness) so a recorded session can be replayed against a ported physics loop. Off unless the variable is set.
