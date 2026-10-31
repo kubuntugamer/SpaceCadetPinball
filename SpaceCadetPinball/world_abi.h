@@ -63,4 +63,5 @@ extern "C"
 	size_t scp_world_edge_count(ScpWorld* world);
 	size_t scp_world_component_count(ScpWorld* world);
 	int32_t scp_world_box_edge_count(ScpWorld* world, int32_t x, int32_t y);
+	size_t scp_world_box_edges(ScpWorld* world, int32_t x, int32_t y, uint64_t* out, size_t capacity);
 }

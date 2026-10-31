@@ -150,10 +150,11 @@ void DebugOverlay::DrawBallInfo()
 			{
 				gOverlayColor = IM_COL32(255, 0, 0, 255);
 				auto x = edgeMan.box_x(ballPosition.X), y = edgeMan.box_y(ballPosition.Y);
-				auto& box = edgeMan.BoxArray[x + y * edgeMan.MaxBoxX];
-				for (auto edge : box.EdgeList)
+				TEdgeSegment* boxEdges[64];
+				auto count = edgeMan.BoxEdges(x, y, boxEdges, sizeof boxEdges / sizeof boxEdges[0]);
+				for (size_t index = 0; index < count; ++index)
 				{
-					DrawEdge(edge);
+					DrawEdge(boxEdges[index]);
 				}
 			}
 

@@ -34,6 +34,9 @@ public:
 	void add_field_to_box(int x, int y, field_effect_type* field);
 	int TestGridBox(int x, int y, float* distPtr, TEdgeSegment** edgeDst, ray_type* ray, TBall* ball, int edgeIndex);
 	float FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegment** edge);
+	// Edges filed in one box, for the debug overlay: the box lists are the
+	// world's when it owns them.
+	size_t BoxEdges(int x, int y, TEdgeSegment** out, size_t capacity);
 	// The box walk this class used to own. Only run when nothing else needs it, but
 	// always compiled so SCP_WORLD_CHECK can compare it against the world.
 	float FindCollisionDistanceCpp(ray_type* ray, TBall* ball, TEdgeSegment** edge);

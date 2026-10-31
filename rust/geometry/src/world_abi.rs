@@ -324,6 +324,32 @@ pub unsafe extern "C" fn scp_world_box_edge_count(handle: *mut World, x: i32, y:
     }
 }
 
+/// Writes the packed ids of a box's edges into `out`, for the debug overlay,
+/// and returns how many were written (at most `capacity`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_box_edges(
+    handle: *mut World,
+    x: i32,
+    y: i32,
+    out: *mut u64,
+    capacity: usize,
+) -> usize {
+    let Some(world) = (unsafe { world(handle) }) else {
+        return 0;
+    };
+    if out.is_null() || capacity == 0 {
+        return 0;
+    }
+
+    let edges = world.box_edges(x, y);
+    let count = edges.len().min(capacity);
+    for (index, &edge) in edges.iter().take(count).enumerate() {
+        // SAFETY: `out` points to room for `capacity` entries and index < count.
+        unsafe { *out.add(index) = pack(edge) };
+    }
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,6 +425,33 @@ mod tests {
             assert_eq!(scp_world_remove_component(handle, wall), 1);
             assert_eq!(scp_world_edge_count(handle), 0);
             assert_eq!(scp_world_box_edge_count(handle, 5, 7), 0);
+
+            scp_world_destroy(handle);
+        }
+    }
+
+    #[test]
+    fn a_box_lists_the_edges_the_overlay_draws() {
+        // SAFETY: the world is created and destroyed inside this test.
+        unsafe {
+            let handle = scp_world_create(0.0, 0.0, 100.0, 150.0);
+            let wall = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
+            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, 7);
+
+            let mut ids = [0u64; 4];
+            let count = scp_world_box_edges(handle, 5, 7, ids.as_mut_ptr(), ids.len());
+            assert_eq!(count, 1);
+            assert_eq!(ids[0], edge);
+
+            // A smaller buffer truncates instead of overflowing.
+            let mut one = [0u64; 1];
+            assert_eq!(
+                scp_world_box_edges(handle, 5, 7, one.as_mut_ptr(), 0),
+                0
+            );
+
+            assert_eq!(scp_world_box_edges(handle, -3, 99, ids.as_mut_ptr(), 4), 0);
+            assert_eq!(scp_world_box_edges(ptr::null_mut(), 5, 7, ids.as_mut_ptr(), 4), 0);
 
             scp_world_destroy(handle);
         }

@@ -423,6 +423,38 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 }
 #endif
 
+size_t TEdgeManager::BoxEdges(int x, int y, TEdgeSegment** out, size_t capacity)
+{
+	if (!out || capacity == 0 || (unsigned)x >= (unsigned)MaxBoxX || (unsigned)y >= (unsigned)MaxBoxY)
+	{
+		return 0;
+	}
+
+#ifdef SCP_USE_RUST_WORLD
+	if (World && !WorldCheck)
+	{
+		uint64_t ids[128];
+		auto limit = capacity < sizeof ids / sizeof ids[0] ? capacity : sizeof ids / sizeof ids[0];
+		auto count = scp_world_box_edges(World, x, y, ids, limit);
+		size_t written = 0;
+		for (size_t index = 0; index < count; ++index)
+		{
+			auto found = WorldEdgeLookup.find(ids[index]);
+			if (found != WorldEdgeLookup.end())
+			{
+				out[written++] = found->second;
+			}
+		}
+		return written;
+	}
+#endif
+
+	auto& list = BoxArray[x + y * MaxBoxX].EdgeList;
+	auto count = capacity < list.size() ? capacity : list.size();
+	std::copy_n(list.begin(), count, out);
+	return count;
+}
+
 vector2 TEdgeManager::NormalizeBox(vector2 pt) const
 {
 	// Standard PB Box ranges: X [-8, 8]; Y [-14, 15]; Top right corner: (-8, -14)
