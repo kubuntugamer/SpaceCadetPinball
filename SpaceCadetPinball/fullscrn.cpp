@@ -64,11 +64,14 @@ int fullscrn::enableFullscreen()
 		glfwGetWindowPos(winmain::MainWindow, &savedWindowX, &savedWindowY);
 		glfwGetWindowSize(winmain::MainWindow, &savedWindowW, &savedWindowH);
 
-		// The display the window is on, not the backend's primary display.
-		auto monitor = monitor_showing_rect(savedWindowX, savedWindowY, savedWindowW, savedWindowH);
-		if (monitor)
+		// An explicitly chosen display wins; otherwise use the display the window
+		// is on, not the backend's primary display.
+		auto monitor = monitor_at_index(options::Options.FullScreenDisplay);
+		if (!monitor)
+			monitor = monitor_showing_rect(savedWindowX, savedWindowY, savedWindowW, savedWindowH);
+		const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+		if (mode)
 		{
-			const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 			glfwSetWindowMonitor(winmain::MainWindow, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
 			display_changed = 1;
 			return 1;

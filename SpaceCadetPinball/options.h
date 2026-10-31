@@ -260,6 +260,8 @@ struct optionsStruct
 	BoolOption Sounds;
 	BoolOption Music;
 	BoolOption FullScreen;
+	// Monitor index for fullscreen, or -1 to use the display the window is on.
+	IntOption FullScreenDisplay;
 	IntOption Players;
 	IntOption Resolution;
 	FloatOption UIScale;

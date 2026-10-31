@@ -19,6 +19,17 @@
  *
  * Falls back to the primary monitor only when the rectangle overlaps no monitor.
  */
+/*
+ * The monitor at an enumeration index, or null when the index is out of range
+ * (a display that was disconnected since the setting was saved).
+ */
+inline GLFWmonitor* monitor_at_index(int index)
+{
+	int monitorCount = 0;
+	GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+	return index >= 0 && index < monitorCount ? monitors[index] : nullptr;
+}
+
 inline GLFWmonitor* monitor_showing_rect(int windowX, int windowY, int windowW, int windowH)
 {
 	int monitorCount = 0;

@@ -718,6 +718,43 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 
+			if (ImGui::BeginMenu("Fullscreen Display"))
+			{
+				int monitorCount = 0;
+				GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+				auto applyDisplay = [](int index)
+				{
+					if (options::Options.FullScreenDisplay == index)
+						return;
+					options::Options.FullScreenDisplay = index;
+					// Fullscreen is already up: come back down and re-enter so the
+					// choice takes effect immediately instead of on the next toggle.
+					if (options::Options.FullScreen && fullscrn::display_changed)
+					{
+						fullscrn::set_screen_mode(0);
+						fullscrn::set_screen_mode(1);
+					}
+				};
+
+				if (ImGui::MenuItem("Automatic (window's display)", nullptr, Options.FullScreenDisplay < 0))
+				{
+					applyDisplay(-1);
+				}
+				for (int index = 0; index < monitorCount; ++index)
+				{
+					const char* name = glfwGetMonitorName(monitors[index]);
+					char label[128]{};
+					snprintf(label, sizeof label, "%s##display%d", name && *name ? name : "Display", index);
+					if (ImGui::MenuItem(label, nullptr, Options.FullScreenDisplay == index))
+					{
+						applyDisplay(index);
+					}
+				}
+				if (Options.FullScreenDisplay >= monitorCount)
+					ImGui::TextDisabled("Configured display is not connected");
+				ImGui::EndMenu();
+			}
+
 			if (ImGui::BeginMenu("Game Data"))
 			{
 				if (ImGui::MenuItem("Prefer 3DPB Data", nullptr, Options.Prefer3DPBGameData))

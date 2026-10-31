@@ -132,6 +132,7 @@ optionsStruct options::Options
 	// play music at all is unaffected by this default.
 	{"Music", true},
 	{"FullScreen", false},
+	{"Fullscreen Display", -1},
 	{"Players", 1},
 	{"Screen Resolution", -1},
 	{"UI Scale", 1.0f},
