@@ -315,6 +315,10 @@ build.ninja
 /build
 /build-*/
 
+# Local scratch space for benchmarks, trace dumps and downloaded artifacts.
+# Deliberately inside the project so nothing lands in the system temp dir.
+/scratch/
+
 # Cargo build output for the Rust geometry crate
 /rust/geometry/target/
 
