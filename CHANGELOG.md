@@ -11,6 +11,10 @@ below concerns them.
 
 ## [Unreleased]
 
+### Changed
+
+* The per-frame ball integration — the frame slice clamp, field force, renormalised speed and substep count — runs in the Rust geometry crate. A new `ballstep_parity` test compares it with the C++ arithmetic it replaced over 24,032 cases, bit for bit, because `direction * speed + field * slice` is the expression a compiler is free to fuse.
+
 ## [2.6.1] - 2026-10-30
 
 ### Added

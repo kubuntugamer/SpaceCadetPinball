@@ -98,6 +98,22 @@ struct RustBallSphere
 	int32_t CollisionMask;
 };
 
+// The per-frame ball integration `pb::timed_frame` performs before its substep
+// loop: slice clamp, field force, renormalised speed and the substep count.
+struct RustBallAdvance
+{
+	float DirectionX;
+	float DirectionY;
+	float Speed;
+	float TimeDelta;
+	float StepsDistance;
+	float FieldX;
+	float FieldY;
+	float BallMaxSpeed;
+	float HalfRadius;
+	int32_t Steps;
+};
+
 extern "C"
 {
 	void scp_geometry_enclosing_box(const RustRectangle* first, const RustRectangle* second, RustRectangle* output);
@@ -105,6 +121,7 @@ extern "C"
 	float scp_geometry_ray_intersect_circle(const RustRay* ray, const RustCircle* circle);
 	int32_t scp_geometry_nearest_ball(const RustRay* ray, const RustBallSphere* spheres, size_t count,
 	                                  size_t skip, float span, float* distance);
+	void scp_ball_advance(RustBallAdvance* state);
 	float scp_geometry_normalize_2d(RustVector2* vector);
 	void scp_geometry_line_init(RustLine* line, float x0, float y0, float x1, float y1);
 	float scp_geometry_ray_intersect_line(const RustRay* ray, RustLine* line);

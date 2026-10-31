@@ -389,6 +389,29 @@ void pb::timed_frame(float timeDelta)
 			else
 			{
 				TTableLayer::edge_manager->FieldEffects(ball, &vecDst);
+#ifdef SCP_USE_RUST_GEOMETRY
+				// Field force, heading, speed clamp and substep count are the same
+				// arithmetic the frame loop used to spell out here.
+				RustBallAdvance advance{};
+				advance.DirectionX = ball->Direction.X;
+				advance.DirectionY = ball->Direction.Y;
+				advance.Speed = ball->Speed;
+				advance.TimeDelta = ball->TimeDelta;
+				advance.FieldX = vecDst.X;
+				advance.FieldY = vecDst.Y;
+				advance.BallMaxSpeed = BallMaxSpeed;
+				advance.HalfRadius = BallHalfRadius;
+				scp_ball_advance(&advance);
+
+				ball->Direction.X = advance.DirectionX;
+				ball->Direction.Y = advance.DirectionY;
+				ball->Speed = advance.Speed;
+				ball->TimeDelta = advance.TimeDelta;
+				ballStepsDistance[index] = advance.StepsDistance;
+				ballSteps[index] = advance.Steps;
+				if (advance.Steps > maxStep)
+					maxStep = advance.Steps;
+#else
 				vecDst.X *= ball->TimeDelta;
 				vecDst.Y *= ball->TimeDelta;
 				ball->Direction.X *= ball->Speed;
@@ -403,6 +426,7 @@ void pb::timed_frame(float timeDelta)
 				ballSteps[index] = ballStep;
 				if (ballStep > maxStep)
 					maxStep = ballStep;
+#endif
 			}
 		}
 	}
@@ -508,7 +532,12 @@ void pb::trace_balls()
 		{
 			trace = std::fopen(path, "w");
 			if (trace)
+			{
+				// Line buffered, so a run that is killed mid-frame still leaves only
+				// whole lines behind for a comparison to read.
+				std::setvbuf(trace, nullptr, _IOLBF, 0);
 				std::fprintf(trace, "# scp ball trace: time_ticks, then per ball active x y dx dy speed\n");
+			}
 		}
 	}
 

@@ -12,6 +12,7 @@
 //! matters for a physics engine where a one-ulp change can alter a bounce.
 
 pub mod balls;
+pub mod ballstep;
 pub mod grid;
 pub mod proj;
 pub mod world;

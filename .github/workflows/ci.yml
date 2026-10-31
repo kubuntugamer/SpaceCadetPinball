@@ -40,6 +40,9 @@ jobs:
       - name: Compare the Rust projection against the C++ reference
         run: ./bin/proj_parity
 
+      - name: Compare the Rust ball step against the C++ reference
+        run: ./bin/ballstep_parity
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
