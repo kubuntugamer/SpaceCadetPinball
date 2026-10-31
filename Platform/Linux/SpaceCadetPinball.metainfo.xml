@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.5" date="2026-10-31">
+            <description>
+                <p>Flipper collision geometry, ball stepping and circle box-filling now come from the Rust geometry crate, each verified against the original implementation.</p>
+            </description>
+        </release>
         <release version="2.6.4" date="2026-10-31">
             <description>
                 <p>The Rust substep loop became the default; the original C++ loop stays available for comparison.</p>

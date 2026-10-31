@@ -10,14 +10,16 @@ Game data and SoundFonts are never distributed with the source, so no entry
 below concerns them.
 
 ## [Unreleased]
+### Changed
+
+* The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
+
+## [2.6.5] - 2026-10-31
 
 ### Changed
 
 * Which grid boxes a circle reaches — the last of the spatial bookkeeping in C++ — is decided in the Rust geometry crate. `circlegrid_parity` compares the box lists, in order, against the original over 25,932 cases.
 
-### Changed
-
-* The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
 
 ## [2.6.4] - 2026-10-31
 
