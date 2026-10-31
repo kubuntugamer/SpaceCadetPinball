@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.5.0" date="2026-10-30">
+            <description>
+                <p>Added a Fullscreen Display option to choose the monitor used for fullscreen.</p>
+            </description>
+        </release>
         <release version="2.4.2" date="2026-10-30">
             <description>
                 <p>Fixed fullscreen opening on the wrong display in a multi-monitor setup.</p>

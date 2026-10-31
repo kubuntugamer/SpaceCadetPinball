@@ -1,6 +1,6 @@
 {
   "name": "spacecadetpinball",
-  "version-string": "2.4.2",
+  "version-string": "2.5.0",
   "dependencies": [
     "glfw3",
     "vulkan"

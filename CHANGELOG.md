@@ -11,6 +11,12 @@ below concerns them.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-30
+
+### Added
+
+* `Options -> Fullscreen Display` picks the monitor used for fullscreen: `Automatic (window's display)` or a specific display by name. The choice is saved, re-applies immediately if fullscreen is already up, and falls back to automatic when the chosen display is no longer connected. This also gives a way out on Wayland, where the window's own display cannot be detected because GLFW reports every window at the origin.
+
 ## [2.4.2] - 2026-10-30
 
 ### Fixed
