@@ -548,12 +548,14 @@ void pb::timed_frame(float timeDelta)
 			if (!ball->CollisionDisabledFlag && ballSteps[ballIndex] >= step)
 			{
 #ifdef SCP_USE_RUST_GEOMETRY
-				// SCP_RUST_STEPPER=1 runs the substep loop from rust/geometry instead
-				// of the loop below, so the two can be A/B'd in one binary. Off by
-				// default: the C++ loop ships until a recorded run agrees.
+				// The substep loop runs from rust/geometry; SCP_RUST_STEPPER=0 puts
+				// the C++ loop back, one binary either way, for an A/B run.
 				static int rustStepper = -1;
 				if (rustStepper < 0)
-					rustStepper = std::getenv("SCP_RUST_STEPPER") ? 1 : 0;
+				{
+					auto value = std::getenv("SCP_RUST_STEPPER");
+					rustStepper = !value || value[0] != '0';
+				}
 				if (rustStepper > 0)
 				{
 					ball_step_substeps(ball, ballSteps[ballIndex], step, ballStepsDistance[ballIndex]);
