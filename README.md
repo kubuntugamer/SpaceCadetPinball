@@ -163,6 +163,12 @@ ImGui/miniaudio/stb sources. Those reference each other through pointers and cal
 back into game logic, sprites and timers, so they need an ownership model before
 code moves; issue #15 tracks the phases.
 
+The ownership model for that graph — one arena-backed owner in Rust,
+generational ids instead of pointers, collisions reported as data and side
+effects queued for the host — is written down in
+[`Doc/rust-object-ownership.md`](Doc/rust-object-ownership.md), together with the
+slice order and the bit-exact acceptance test for each slice.
+
 ## Building
 
 ### Windows (MSVC + vcpkg)
