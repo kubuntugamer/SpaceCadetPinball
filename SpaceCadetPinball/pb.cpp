@@ -21,6 +21,7 @@
 
 #ifdef SCP_USE_RUST_GEOMETRY
 #include "maths_rust_abi.h"
+#include "stepper_abi.h"
 #endif
 #include "TDemo.h"
 #include "TEdgeSegment.h"
@@ -340,6 +341,102 @@ void pb::frame(float dtMilliSec)
 	}
 }
 
+#ifdef SCP_USE_RUST_GEOMETRY
+namespace
+{
+	struct ball_step_context
+	{
+		TBall* Ball;
+		ray_type Ray;
+	};
+
+	float step_cast(void* userdata, const RustRay* ray, uint64_t* edge)
+	{
+		auto context = static_cast<ball_step_context*>(userdata);
+		auto& native = context->Ray;
+		native.Origin.X = ray->Origin.X;
+		native.Origin.Y = ray->Origin.Y;
+		native.Direction.X = ray->Direction.X;
+		native.Direction.Y = ray->Direction.Y;
+		native.MaxDistance = ray->MaxDistance;
+		native.MinDistance = ray->MinDistance;
+		native.CollisionMask = ray->CollisionMask;
+
+		TEdgeSegment* found = nullptr;
+		auto distance = TTableLayer::edge_manager->FindCollisionDistance(&native, context->Ball, &found);
+		*edge = reinterpret_cast<uint64_t>(found);
+		return distance;
+	}
+
+	float step_ball_ball(void* userdata, const RustRay* ray, float distance, uint64_t* edge)
+	{
+		auto context = static_cast<ball_step_context*>(userdata);
+		(void)ray;
+		auto found = reinterpret_cast<TEdgeSegment*>(*edge);
+		auto updated = pb::BallToBallCollision(context->Ray, *context->Ball, &found, distance);
+		*edge = reinterpret_cast<uint64_t>(found);
+		return updated;
+	}
+
+	void step_collision(void* userdata, uint64_t edge, float distance, RustStepperBall* state)
+	{
+		auto ball = static_cast<ball_step_context*>(userdata)->Ball;
+
+		// Round trip: what the loop held is written into the ball, its edge runs,
+		// and whatever the edge changed comes back.
+		ball->Position.X = state->PosX;
+		ball->Position.Y = state->PosY;
+		ball->Direction.X = state->DirX;
+		ball->Direction.Y = state->DirY;
+		ball->EdgeCollisionCount = state->EdgeCollisionCount;
+		ball->EdgeCollisionResetFlag = state->EdgeCollisionResetFlag != 0;
+		ball->CollisionDisabledFlag = state->CollisionDisabledFlag != 0;
+
+		reinterpret_cast<TEdgeSegment*>(edge)->EdgeCollision(ball, distance);
+
+		state->PosX = ball->Position.X;
+		state->PosY = ball->Position.Y;
+		state->DirX = ball->Direction.X;
+		state->DirY = ball->Direction.Y;
+		state->EdgeCollisionCount = ball->EdgeCollisionCount;
+		state->EdgeCollisionResetFlag = ball->EdgeCollisionResetFlag ? 1 : 0;
+		state->CollisionDisabledFlag = ball->CollisionDisabledFlag ? 1 : 0;
+	}
+}
+
+void pb::ball_step_substeps(TBall* ball, int ballSteps, int step, float stepsDistance)
+{
+	ball_step_context context{ball, ray_type{}};
+
+	StepperHost host{};
+	host.userdata = &context;
+	host.cast = &step_cast;
+	host.ballBall = &step_ball_ball;
+	host.edgeCollision = &step_collision;
+	host.minDistance = 0.002f;
+
+	RustStepperBall state{};
+	state.PosX = ball->Position.X;
+	state.PosY = ball->Position.Y;
+	state.DirX = ball->Direction.X;
+	state.DirY = ball->Direction.Y;
+	state.CollisionMask = ball->CollisionMask;
+	state.EdgeCollisionCount = ball->EdgeCollisionCount;
+	state.EdgeCollisionResetFlag = ball->EdgeCollisionResetFlag ? 1 : 0;
+	state.CollisionDisabledFlag = ball->CollisionDisabledFlag ? 1 : 0;
+
+	scp_ball_substeps(&host, &state, ballSteps, step, stepsDistance, BallHalfRadius);
+
+	ball->Position.X = state.PosX;
+	ball->Position.Y = state.PosY;
+	ball->Direction.X = state.DirX;
+	ball->Direction.Y = state.DirY;
+	ball->EdgeCollisionCount = state.EdgeCollisionCount;
+	ball->EdgeCollisionResetFlag = state.EdgeCollisionResetFlag != 0;
+	ball->CollisionDisabledFlag = state.CollisionDisabledFlag != 0;
+}
+#endif
+
 void pb::timed_frame(float timeDelta)
 {
 	for (auto ball : MainTable->BallList)
@@ -450,6 +547,19 @@ void pb::timed_frame(float timeDelta)
 			auto ball = MainTable->BallList[ballIndex];
 			if (!ball->CollisionDisabledFlag && ballSteps[ballIndex] >= step)
 			{
+#ifdef SCP_USE_RUST_GEOMETRY
+				// SCP_RUST_STEPPER=1 runs the substep loop from rust/geometry instead
+				// of the loop below, so the two can be A/B'd in one binary. Off by
+				// default: the C++ loop ships until a recorded run agrees.
+				static int rustStepper = -1;
+				if (rustStepper < 0)
+					rustStepper = std::getenv("SCP_RUST_STEPPER") ? 1 : 0;
+				if (rustStepper > 0)
+				{
+					ball_step_substeps(ball, ballSteps[ballIndex], step, ballStepsDistance[ballIndex]);
+					continue;
+				}
+#endif
 				ray.CollisionMask = ball->CollisionMask;
 
 				for (auto distanceSum = 0.0f; distanceSum < BallHalfRadius;)

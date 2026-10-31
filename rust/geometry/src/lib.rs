@@ -15,6 +15,7 @@ pub mod balls;
 pub mod ballstep;
 pub mod grid;
 pub mod proj;
+pub mod stepper;
 pub mod world;
 pub mod world_abi;
 

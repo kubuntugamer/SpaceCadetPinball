@@ -50,6 +50,8 @@ public:
 	static void ballset(float dx, float dy);
 	static void frame(float dtMilliSec);
 	static void timed_frame(float timeDelta);
+	// Drives one ball's substeps from rust/geometry (SCP_RUST_STEPPER).
+	static void ball_step_substeps(TBall* ball, int ballSteps, int step, float stepsDistance);
 	// Appends one line of ball state per frame when SCP_TRACE names a file.
 	static void trace_balls();
 	static void pause_continue();
@@ -66,8 +68,9 @@ public:
 	static int get_rc_int(Msg uID, int* dst);
 	static std::string make_path_name(const std::string& fileName);
 	static void ShowMessageBox(MessageBoxIcon icon, LPCSTR title, LPCSTR message);
+	// Keeps the C++ loop and the Rust substep loop calling the same routine.
+	static float BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance);
 private:
 	static bool demo_mode;
 	static float IdleTimerMs;
-	static float BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance);
 };

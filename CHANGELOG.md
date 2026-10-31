@@ -11,6 +11,10 @@ below concerns them.
 
 ## [Unreleased]
 
+### Changed
+
+* The ball's substep loop — the innermost collision iteration, with its ray windows, dedupe flag and break conditions — can run from `rust/geometry` with `SCP_RUST_STEPPER=1`. The C++ loop still ships as the default; `stepper_parity` compares the two, call for call, over 2,100 scripted scenarios.
+
 ## [2.6.2] - 2026-10-30
 
 ### Changed
