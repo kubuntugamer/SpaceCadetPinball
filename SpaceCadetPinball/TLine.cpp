@@ -47,6 +47,17 @@ float TLine::FindCollisionDistance(const ray_type& ray)
 
 void TLine::EdgeCollision(TBall* ball, float distance)
 {
+#ifdef SCP_USE_RUST_WORLD
+	// The distance came from the world's own copy of this segment, so the
+	// contact point did too: the query that used to run here is what wrote
+	// Line.RayIntersect, and the response below reflects the ball from it.
+	// A false return leaves the existing value alone -- the edge was not the
+	// world's to begin with.
+	if (TTableLayer::edge_manager)
+	{
+		TTableLayer::edge_manager->EdgeHitPoint(this, &Line.RayIntersect.X, &Line.RayIntersect.Y);
+	}
+#endif
 	CollisionComponent->Collision(
 		ball,
 		&Line.RayIntersect,

@@ -4,8 +4,10 @@
 
 #include "maths.h"
 #include "TBall.h"
+#include "TCircle.h"
 #include "TEdgeBox.h"
 #include "TEdgeSegment.h"
+#include "TLine.h"
 #include "TTableLayer.h"
 
 #ifdef SCP_USE_RUST_GEOMETRY
@@ -229,11 +231,37 @@ void TEdgeManager::FlushWorldEdges()
 		}
 
 		entry.Owner = OwnerFor(edge->CollisionComponent);
-		// Group 0xffffffff keeps the world from filtering; the group mask, the
-		// already-hit list and the active flag are applied where they always were.
-		entry.Id = scp_world_add_external_edge(World, entry.Owner, 0xffffffffu, world_edge_distance, edge,
-		                                       entry.Boxes.data(), entry.Boxes.size(),
-		                                       static_cast<size_t>(reinterpret_cast<uintptr_t>(edge->WallValue)));
+		// The world applies the group mask itself, where TestGridBox did. It used
+		// to be handed 0xffffffff here "to keep the world from filtering", which
+		// meant nothing filtered: an edge only reachable through a ball mask the
+		// C++ walk enforced was being hit regardless.
+		auto group = edge->CollisionGroup;
+		auto wallValue = static_cast<size_t>(reinterpret_cast<uintptr_t>(edge->WallValue));
+		auto boxes = entry.Boxes.data();
+		auto boxCount = entry.Boxes.size();
+
+		// Walls hand their geometry over, so the cast answers from Rust and never
+		// comes back here for a distance. Flippers keep the callback: their
+		// segments are rebuilt as the bat turns, and re-registering that every
+		// frame is what the seam is for.
+		if (auto line = dynamic_cast<TLine*>(edge))
+		{
+			entry.Id = scp_world_add_line_edge(World, entry.Owner, group, line->X0, line->Y0, line->X1, line->Y1,
+			                                   boxes, boxCount, wallValue);
+		}
+		else if (auto circle = dynamic_cast<TCircle*>(edge))
+		{
+			// Squared, because that is what TCircle holds and what the distance is
+			// computed against; a radius round trip would nudge it by an ulp.
+			entry.Id = scp_world_add_circle_edge_sq(World, entry.Owner, group, circle->Circle.Center.X,
+			                                        circle->Circle.Center.Y, circle->Circle.RadiusSq, boxes,
+			                                        boxCount, wallValue);
+		}
+		else
+		{
+			entry.Id = scp_world_add_external_edge(World, entry.Owner, group, world_edge_distance, edge,
+			                                       boxes, boxCount, wallValue);
+		}
 		entry.Registered = true;
 		WorldEdgeLookup[entry.Id] = edge;
 	}
@@ -290,6 +318,14 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 	if (WorldCheck)
 	{
 		++WorldCheckCasts;
+		if (WorldCheckCasts % 20000 == 0)
+		{
+			// A session ends by being killed, not by exiting, so the totals the
+			// destructor prints would rarely be seen; a running total makes
+			// "the two walks agreed so far" observable while it happens.
+			fprintf(stderr, "SCP_WORLD_CHECK: %zu casts compared, %d mismatches\n", WorldCheckCasts,
+			        WorldCheckMismatches);
+		}
 		// Both walks run on the same ray and the answers must be identical, edge
 		// for edge. A disagreement means the world's box membership or ordering
 		// differs from the array it replaced, which is invisible from gameplay
@@ -307,6 +343,25 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 				fprintf(stderr,
 						"SCP_WORLD_CHECK mismatch: cpp wall %zu dist %.9g, world wall %zu dist %.9g\n",
 						static_cast<size_t>(cppWall), cppDistance, static_cast<size_t>(worldWall), worldDistance);
+			}
+		}
+		else if (auto line = dynamic_cast<TLine*>(worldEdge))
+		{
+			// The contact point no longer rides along with the distance: the world
+			// keeps it and TLine::EdgeCollision reads it back, while the C++ walk
+			// left its own in Line.RayIntersect. Same ray, same segment, so the two
+			// copies have to agree bit for bit -- this is the one thing comparing
+			// distances cannot see.
+			float worldX = 0.0f, worldY = 0.0f;
+			if (EdgeHitPoint(worldEdge, &worldX, &worldY) &&
+			    (worldX != line->Line.RayIntersect.X || worldY != line->Line.RayIntersect.Y))
+			{
+				if (WorldCheckMismatches++ < 20)
+				{
+					fprintf(stderr,
+							"SCP_WORLD_CHECK mismatch: contact point, cpp %.9g %.9g, world %.9g %.9g\n",
+							line->Line.RayIntersect.X, line->Line.RayIntersect.Y, worldX, worldY);
+				}
 			}
 		}
 	}
@@ -433,6 +488,21 @@ float TEdgeManager::FindCollisionDistance(ray_type* ray, TBall* ball, TEdgeSegme
 #endif
 
 #ifdef SCP_USE_RUST_WORLD
+bool TEdgeManager::EdgeHitPoint(TEdgeSegment* edge, float* outX, float* outY)
+{
+	if (!World || !edge)
+	{
+		return false;
+	}
+
+	auto found = WorldEdges.find(edge);
+	if (found == WorldEdges.end() || !found->second.Registered)
+	{
+		return false;
+	}
+	return scp_world_edge_hit_point(World, found->second.Id, outX, outY) != 0;
+}
+
 int32_t TEdgeManager::EdgeActiveForProbe(uint64_t edgeId)
 {
 	auto found = WorldEdgeLookup.find(edgeId);

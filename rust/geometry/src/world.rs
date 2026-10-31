@@ -428,12 +428,29 @@ impl World {
         y1: f32,
         wall_value: usize,
     ) -> EdgeId {
+        let mut boxes = [0i32; 256];
+        let count = walk_segment(&self.grid(), x0, y0, x1, y1, &mut boxes);
+        self.add_line_edge_in_boxes(owner, group, x0, y0, x1, y1, &boxes[..count], wall_value)
+    }
+
+    /// As [`Self::add_line_edge`], filed into the boxes the engine's own walk
+    /// chose. The host passes them because `TLine::place_in_grid` already
+    /// recorded them, and two walks agreeing only by luck is not a guarantee:
+    /// the box an edge sits in decides which casts can see it and in what order.
+    pub fn add_line_edge_in_boxes(
+        &mut self,
+        owner: CompId,
+        group: u32,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        boxes: &[i32],
+        wall_value: usize,
+    ) -> EdgeId {
         let mut line = Line::default();
         // SAFETY: `line` is a valid writable local.
         unsafe { scp_geometry_line_init(&mut line, x0, y0, x1, y1) };
-
-        let mut boxes = [0i32; 256];
-        let count = walk_segment(&self.grid(), x0, y0, x1, y1, &mut boxes);
 
         let id = self.insert_edge(Edge {
             owner,
@@ -444,7 +461,7 @@ impl World {
             boxes: Vec::new(),
             processed_epoch: 0,
         });
-        self.link_boxes(id, &boxes[..count]);
+        self.link_boxes(id, boxes);
         id
     }
 
@@ -459,7 +476,21 @@ impl World {
         radius: f32,
         wall_value: usize,
     ) -> EdgeId {
-        let mut radius_m = sqrt_f32(radius * radius) + self.advance_x * 0.001;
+        self.add_circle_edge_sq(owner, group, center, radius * radius, wall_value)
+    }
+
+    /// As [`Self::add_circle_edge`], but from the `radius_sq` the engine already
+    /// holds. Squaring the square root would move the collision distance by an
+    /// ulp, and the engine computes against the squared value it was given.
+    pub fn add_circle_edge_sq(
+        &mut self,
+        owner: CompId,
+        group: u32,
+        center: crate::Vector2,
+        radius_sq: f32,
+        wall_value: usize,
+    ) -> EdgeId {
+        let mut radius_m = sqrt_f32(radius_sq) + self.advance_x * 0.001;
         if !radius_m.is_finite() {
             radius_m = 0.0;
         }
@@ -476,20 +507,50 @@ impl World {
             }
         }
 
+        self.add_circle_edge_in_boxes(owner, group, center, radius_sq, &boxes, wall_value)
+    }
+
+    /// As [`Self::add_circle_edge_sq`], from the boxes the engine filled. The
+    /// engine's are not this function's bounding range -- `edges_insert_circle`
+    /// tests a subset -- and the two disagreeing is exactly the sort of thing
+    /// that shows up as a wall that is solid on one path and absent on the other.
+    pub fn add_circle_edge_in_boxes(
+        &mut self,
+        owner: CompId,
+        group: u32,
+        center: crate::Vector2,
+        radius_sq: f32,
+        boxes: &[i32],
+        wall_value: usize,
+    ) -> EdgeId {
         let id = self.insert_edge(Edge {
             owner,
             group,
             wall_value,
             geometry: EdgeGeometry::Circle(Circle {
                 center,
-                radius_sq: radius * radius,
+                radius_sq,
             }),
             user_data: 0,
             boxes: Vec::new(),
             processed_epoch: 0,
         });
-        self.link_boxes(id, &boxes);
+        self.link_boxes(id, boxes);
         id
+    }
+
+    /// Where the last cast's ray struck this edge, for a line the engine needs
+    /// the contact point of: `TLine::EdgeCollision` reflects the ball from
+    /// `Line.RayIntersect`, which the distance query used to write.
+    ///
+    /// `None` for geometry that carries no intersect of its own -- a circle
+    /// derives its contact point from the centre, and an external edge computes
+    /// in C++, which writes its own copy.
+    pub fn edge_hit_point(&self, edge: EdgeId) -> Option<(f32, f32)> {
+        match &self.edges.get(edge)?.geometry {
+            EdgeGeometry::Line(line) => Some((line.ray_intersect.x, line.ray_intersect.y)),
+            EdgeGeometry::Circle(_) | EdgeGeometry::External { .. } => None,
+        }
     }
 
     /// An edge whose distance is still computed by C++.
@@ -751,6 +812,25 @@ mod tests {
         let mut masked = ray(0.0, 75.0, 1.0, 0.0, 100.0);
         masked.collision_mask = 0b10;
         assert!(world.cast(&masked, &[]).is_some());
+    }
+
+    #[test]
+    fn the_contact_point_comes_back_from_the_cast() {
+        let mut world = world();
+        let wall = world.add_component(Collider::default());
+        let line = world.add_line_edge(wall, 1, 50.0, 150.0, 50.0, 0.0, 0);
+
+        let hit = world.cast(&ray(0.0, 75.0, 1.0, 0.0, 100.0), &[]).unwrap();
+        assert_eq!(hit.distance, 50.0);
+        // `TLine::EdgeCollision` reflects the ball from this point, which the
+        // C++ query used to leave behind in `Line.RayIntersect`.
+        assert_eq!(world.edge_hit_point(line), Some((50.0, 75.0)));
+
+        // A circle derives its contact point from its centre, and an external
+        // edge writes its own copy in C++: neither carries an intersect.
+        let bumper = world.add_component(Collider::default());
+        let circle = world.add_circle_edge(bumper, 1, Vector2 { x: 50.0, y: 75.0 }, 10.0, 3);
+        assert_eq!(world.edge_hit_point(circle), None);
     }
 
     #[test]

@@ -42,6 +42,9 @@ public:
 	// Answer to the world's activeness probe: components flip this per edge, so
 	// the world cannot decide from the owning component alone.
 	int32_t EdgeActiveForProbe(uint64_t edgeId);
+	// Where the world's own query struck an edge it owns. False when the edge is
+	// still computed here, which is the caller's cue to keep its own value.
+	bool EdgeHitPoint(TEdgeSegment* edge, float* outX, float* outY);
 #endif
 	// The box walk this class used to own. Only run when nothing else needs it, but
 	// always compiled so SCP_WORLD_CHECK can compare it against the world.

@@ -13,7 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
-| Rust migration | The maths, collision-grid and projection layers (`rust/geometry`) run in Rust; the object graph and platform shell remain C++ |
+| Rust migration | The maths, collision-grid, projection and collision-world layers (`rust/geometry`) run in Rust; the object graph and platform shell remain C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -132,6 +132,11 @@ every build links it by default:
   (`TEdgeManager::FindCollisionDistance`, `TLine::place_in_grid`);
 * the projection (`proj.cpp`): matrix multiply, depth, 3D-to-2D sprite transform,
   reverse transform and z-buffer normalization.
+* the collision world that owns casting (`SCP_USE_RUST_WORLD`): box membership,
+  the ray walk, and the geometry of table walls and bumpers, which register their
+  segment or squared radius once and are answered from Rust on every cast;
+  flippers still answer through a distance callback, because their segments are
+  rebuilt as the bat turns.
 
 ```bash
 cmake -S . -B build

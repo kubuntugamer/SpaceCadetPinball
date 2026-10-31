@@ -172,6 +172,10 @@ pub unsafe extern "C" fn scp_world_is_component_active(handle: *mut World, compo
 
 /// A wall segment. The winding decides which rays can see it, exactly as in the
 /// C++ table data.
+///
+/// `boxes` are the ones the engine's own `place_in_grid` walk filed the edge
+/// into; passing them keeps this registration identical to the C++ grid it
+/// replaces. A null or empty span falls back to walking the segment here.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn scp_world_add_line_edge(
     handle: *mut World,
@@ -181,12 +185,20 @@ pub unsafe extern "C" fn scp_world_add_line_edge(
     y0: f32,
     x1: f32,
     y1: f32,
+    boxes: *const i32,
+    box_count: usize,
     wall_value: usize,
 ) -> u64 {
     let Some(world) = (unsafe { world(handle) }) else {
         return u64::MAX;
     };
-    pack(world.add_line_edge(unpack_component(owner), group, x0, y0, x1, y1, wall_value))
+    let owner = unpack_component(owner);
+    if boxes.is_null() || box_count == 0 {
+        return pack(world.add_line_edge(owner, group, x0, y0, x1, y1, wall_value));
+    }
+    // SAFETY: the host owns `box_count` initialized `i32`s for this call.
+    let boxes = unsafe { core::slice::from_raw_parts(boxes, box_count) };
+    pack(world.add_line_edge_in_boxes(owner, group, x0, y0, x1, y1, boxes, wall_value))
 }
 
 #[unsafe(no_mangle)]
@@ -212,6 +224,69 @@ pub unsafe extern "C" fn scp_world_add_circle_edge(
         radius,
         wall_value,
     ))
+}
+
+/// Add a circle through a squared radius: the caller already holds `radius * radius`
+/// and re-deriving it would round-trip the collision distance through a sqrt.
+///
+/// `boxes` as in [`scp_world_add_line_edge`]; the engine passes the ones
+/// `edges_insert_circle` chose, which are not this function's own range.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_add_circle_edge_sq(
+    handle: *mut World,
+    owner: u64,
+    group: u32,
+    center_x: f32,
+    center_y: f32,
+    radius_sq: f32,
+    boxes: *const i32,
+    box_count: usize,
+    wall_value: usize,
+) -> u64 {
+    let Some(world) = (unsafe { world(handle) }) else {
+        return u64::MAX;
+    };
+    let owner = unpack_component(owner);
+    let center = Vector2 {
+        x: center_x,
+        y: center_y,
+    };
+    if boxes.is_null() || box_count == 0 {
+        return pack(world.add_circle_edge_sq(owner, group, center, radius_sq, wall_value));
+    }
+    // SAFETY: the host owns `box_count` initialized `i32`s for this call.
+    let boxes = unsafe { core::slice::from_raw_parts(boxes, box_count) };
+    pack(world.add_circle_edge_in_boxes(owner, group, center, radius_sq, boxes, wall_value))
+}
+
+/// Where the last cast's ray struck a line the world owns.
+///
+/// The cast computes the distance in Rust now, so the contact point
+/// `TLine::EdgeCollision` reflects the ball from -- the value the C++ query
+/// used to leave in `Line.RayIntersect` -- has to come back the same way.
+/// Written into `out_x`/`out_y`; returns 0 and writes nothing when the edge
+/// carries no intersect of its own (a circle, or an edge still computed in
+/// C++), which is the caller's cue to keep its own value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_edge_hit_point(
+    handle: *mut World,
+    edge: u64,
+    out_x: *mut f32,
+    out_y: *mut f32,
+) -> i32 {
+    let Some(world) = (unsafe { world(handle) }) else {
+        return 0;
+    };
+    let Some((x, y)) = world.edge_hit_point(unpack_edge(edge)) else {
+        return 0;
+    };
+    // SAFETY: both out pointers belong to the caller, which asked for them.
+    let (Some(out_x), Some(out_y)) = (unsafe { out_x.as_mut() }, unsafe { out_y.as_mut() }) else {
+        return 0;
+    };
+    *out_x = x;
+    *out_y = y;
+    1
 }
 
 /// An edge whose distance is still computed in C++.
@@ -392,7 +467,7 @@ mod tests {
 
             let wall = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
             assert_ne!(wall, u64::MAX);
-            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, 7);
+            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, core::ptr::null(), 0, 7);
             assert_ne!(edge, u64::MAX);
             assert_eq!(scp_world_edge_count(handle), 1);
             assert_eq!(scp_world_component_count(handle), 1);
@@ -452,7 +527,7 @@ mod tests {
         unsafe {
             let handle = scp_world_create(0.0, 0.0, 100.0, 150.0);
             let wall = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
-            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, 7);
+            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, core::ptr::null(), 0, 7);
 
             let mut ids = [0u64; 4];
             let count = scp_world_box_edges(handle, 5, 7, ids.as_mut_ptr(), ids.len());
@@ -494,7 +569,7 @@ mod tests {
 
             let handle = scp_world_create(0.0, 0.0, 100.0, 150.0);
             let owner = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
-            let edge = scp_world_add_line_edge(handle, owner, 1, 50.0, 150.0, 50.0, 0.0, 0);
+            let edge = scp_world_add_line_edge(handle, owner, 1, 50.0, 150.0, 50.0, 0.0, core::ptr::null(), 0, 0);
             assert_eq!(scp_world_remove_component(handle, owner), 1);
 
             // The freed edge id must not resolve after its component is gone.
@@ -523,7 +598,7 @@ mod tests {
         unsafe {
             let handle = scp_world_create(0.0, 0.0, 100.0, 150.0);
             let wall = scp_world_add_component(handle, 0.5, 0.5, 0.0, 0.0);
-            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, 0);
+            let edge = scp_world_add_line_edge(handle, wall, 1, 50.0, 150.0, 50.0, 0.0, core::ptr::null(), 0, 0);
             let query = ray(0.0, 75.0, 1.0, 0.0, 100.0);
             let mut hit = AbiHit::default();
 

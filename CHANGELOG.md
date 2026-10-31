@@ -14,9 +14,10 @@ below concerns them.
 ### Changed
 
 * The collision world asks the engine whether an edge may be tested, instead of deciding from the component that owns it. Components flip a per-edge flag while the game runs, which the owner cannot see; this is what lets edge geometry move into the world without changing behaviour. No player-visible change.
-### Changed
 
 * The flipper's collision shape — five control points rotated about the pivot, two lines rebuilt, two circles reset — and the scalars that decide how far a flipper turns per frame and how many substeps that spans are computed in the Rust geometry crate. `flipper_parity` runs the pre-port bodies beside them over 773 cases, bit for bit.
+
+* Table walls hand their geometry to the collision world instead of answering a distance callback: a `TLine` segment its endpoints, a `TCircle` bumper its squared radius, filed into the boxes the engine's own `place_in_grid` walk chose. Casts are answered from Rust in every build; flippers keep the callback, since their segments are rebuilt as the bat turns. The contact point `TLine::EdgeCollision` reflects the ball from comes back through `scp_world_edge_hit_point`, which is what gated this step — and the world now applies the collision-group mask itself, where `TestGridBox` did: registering every edge as group `0xffffffff` meant nothing filtered it at all. `SCP_WORLD_CHECK` compares contact points as well as distances and prints a running cast total; 40,000 casts over a real session reported no disagreement.
 
 ## [2.6.5] - 2026-10-31
 

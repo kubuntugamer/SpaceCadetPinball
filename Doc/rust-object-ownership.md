@@ -4,15 +4,22 @@ Status: **slice 1 half done, shipped as the default in 2.6.0** --
 `rust/geometry/src/world.rs` holds the generational arenas, the id-based grid,
 the epoch marks and the external-edge seam, and `world_abi.rs` exposes them.
 `TEdgeManager` no longer keeps box lists or a walked-edge array for casting:
-membership, the ray walk and the visited marks are the world's, while every edge
-still registers as `External` and computes its own distance in C++. So the grid
-half of slice 1 is switched over and the geometry half (`TLine`/`TCircle` moving
-to Rust) is not -- and cannot be on its own, because `TLine::EdgeCollision` hands
-`Line.RayIntersect` to the component that reads it.
+membership, the ray walk and the visited marks are the world's. Since 2.6.6 the
+geometry half follows it: a `TLine` segment or `TCircle` bumper registers its
+endpoints or squared radius with the world and the cast answers from Rust,
+filed into the boxes the engine's own `place_in_grid` walk chose. Only
+`TFlipperEdge` still registers as `External` and computes its distance in C++,
+because its segments are rebuilt every time the bat turns. The obstacle that
+gated this -- `TLine::EdgeCollision` hands `Line.RayIntersect` to the component
+that reads it, and only the C++ query used to write that field -- is answered by
+`scp_world_edge_hit_point`, which hands the contact point back from the world's
+copy of the segment.
 `-DSCP_USE_RUST_WORLD=OFF` still builds the original C++ walk, and CI builds both.
 
 `SCP_WORLD_CHECK=1` at runtime runs the old C++ walk beside the world on every
-cast and prints any disagreement (edge or distance) to stderr. That is the
+cast and prints any disagreement -- edge, distance, or the contact point
+`EdgeCollision` reflects the ball from -- to stderr, with a running cast total
+so an interrupted session still reports what it compared. That is the
 substitute for traces the tree cannot carry: the real 3DPB table is not
 distributed, so the comparison has to happen inside a real game. Scope: the
 pointer-linked collision object graph that issue #15 calls phase 3. The maths layer, the edge-grid walk
