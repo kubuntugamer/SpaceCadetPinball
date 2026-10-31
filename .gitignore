@@ -330,3 +330,7 @@ build.ninja
 *.sf3
 /portable/
 /wineprefix/
+
+# Physics traces from SCP_TRACE: large, per-session, and regenerated on demand.
+ball-trace*.txt
+
