@@ -28,6 +28,11 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.6.6" date="2026-10-31">
+            <description>
+                <p>Table walls and bumpers hand their geometry to the Rust collision world, which now answers every collision cast itself; gameplay is unchanged.</p>
+            </description>
+        </release>
         <release version="2.6.5" date="2026-10-31">
             <description>
                 <p>Flipper collision geometry, ball stepping and circle box-filling now come from the Rust geometry crate, each verified against the original implementation.</p>
