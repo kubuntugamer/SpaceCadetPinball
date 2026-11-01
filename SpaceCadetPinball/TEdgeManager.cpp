@@ -177,7 +177,7 @@ void TEdgeManager::add_field_to_box(int x, int y, field_effect_type* field)
 #ifdef SCP_USE_RUST_WORLD
 	// The world keeps the field lists beside the edge lists it already owns;
 	// the handle is the pointer, so the walk can hand it straight back here.
-	scp_world_add_field_to_box(World, x, y, reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(field)),
+	scp_world_add_field_to_box(World, x, y, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(field)),
 	                           field->CollisionGroup);
 #else
 	auto& list = BoxArray[x + y * MaxBoxX].FieldList;
