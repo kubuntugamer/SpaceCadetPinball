@@ -13,7 +13,7 @@ for Windows, Linux and macOS.
 | Music | FluidSynth with a General MIDI SoundFont (optional) |
 | UI | Dear ImGui |
 | Build | CMake, C++11 |
-| Rust migration | The maths, collision-grid, projection and collision-world layers (`rust/geometry`) run in Rust; the object graph and platform shell remain C++ |
+| Rust migration | Collision and frame physics (`rust/geometry`): maths, grids and collision world, ball step, flippers, component state machines, projection. The object graph and platform shell remain C++ |
 
 This repository is a fork of [k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball).
 It adds the Windows packaging described below; see [Credits](#credits-and-license).
@@ -122,21 +122,39 @@ If there is no FluidSynth or no SoundFont, the game runs normally without music.
 ## Rust migration slice
 
 The engine is migrating to Rust one self-contained layer at a time. Everything
-that is pure math now lives in the dependency-free crate at `rust/geometry`, and
-every build links it by default:
+that decides a collision, a force or a frame of ball motion now lives in the
+dependency-free crate at `rust/geometry`, and every build links it by default:
 
 * the maths layer (`maths.cpp`): vectors, rectangles, ray/circle and ray/line
   intersection, line construction, ramp edge search, flipper collision probing
   and the ball rebound model;
-* the edge-grid walk that both files table walls and finds them along a ball ray
-  (`TEdgeManager::FindCollisionDistance`, `TLine::place_in_grid`);
+* the collision world that owns casting (`SCP_USE_RUST_WORLD`): box membership for
+  segments, circles and rectangles, the ray walk that finds the nearest edge, and
+  the geometry of table walls and bumpers, which register their segment or
+  squared radius once and are answered from Rust on every cast; flippers still
+  answer through a distance callback, because their segments are rebuilt as the
+  bat turns. Its boxes also own each box's edge list and its field list;
+* the ball: the frame advance (field force, shape of the heading, speed clamp,
+  substep count), the substep loop that moves and collides a ball, the stuck-ball
+  check, the pair and single-edge responses, the launch jitter and the
+  sixteen-slot window that stops one sweep answering the same edge twice;
+* the flipper: the setup derivation from table data, the motion a message puts it
+  in, control points, stepping, angle delta and distance, and the per-substep
+  bookkeeping that advances a swing or gives it ground when it hit a ball;
+* the state machines of fifteen components — bumper, popup target, solo target,
+  blocker, gate, kickback, drain, rollover, light rollover, tripwire, sink,
+  kickout, spinner, ramp and hole. Each hands in one `#[repr(C)]` struct and gets
+  back the sprite, sound, control code and timer the C++ used to call directly,
+  which `component_effects.h` performs, so the objects, their sprites and the
+  timer list stay host-side;
+* the shared responses and field forces every component uses (`basic_collision`,
+  `default_collision`, table/ramp/kickout/hole fields) and the walk that sums a
+  box's fields each frame;
+* the wall builder (`TEdgeSegment::install_wall`): the table-data decode that
+  turns one float array into the lines, arcs and circles a wall is made of. The
+  host keeps the emitter and passes its `RandFloat()` draw in as a value;
 * the projection (`proj.cpp`): matrix multiply, depth, 3D-to-2D sprite transform,
   reverse transform and z-buffer normalization.
-* the collision world that owns casting (`SCP_USE_RUST_WORLD`): box membership,
-  the ray walk, and the geometry of table walls and bumpers, which register their
-  segment or squared radius once and are answered from Rust on every cast;
-  flippers still answer through a distance callback, because their segments are
-  rebuilt as the bat turns.
 
 ```bash
 cmake -S . -B build
@@ -150,23 +168,31 @@ The original C++ implementation is kept as the reference. Pass
 `-DSCP_USE_RUST_GEOMETRY=OFF` to build it instead, which is only useful for
 debugging a suspected port regression on a machine without Rust.
 
-Every ported routine is checked against its C++ original: the differential tests
-compile both implementations and compare results -- bit for bit over 20,000
-maths cases and 200,000 projection cases, box for box over 200,000 edge-grid
-cases -- so a ported routine cannot silently drift.
+Every ported routine is checked against its C++ original. The differential tests
+compile both implementations into one binary and compare results -- bit for bit
+over tens of thousands of randomized cases per routine, box for box over the
+grid walks, and whole-state comparisons over 400-operation sequences of messages,
+hits and timers for the component machines -- so a ported routine cannot silently
+drift. Twenty such tests exist today; CI builds and runs every one of them on
+Linux on each push, and builds the same crate into the Windows release, where
+MSVC and rustc can still disagree on a float operation.
 
 ```bash
 cmake -S . -B build-parity -DSCP_BUILD_PARITY_TESTS=ON
 cmake --build build-parity
-./bin/maths_parity && ./bin/edgegrid_parity && ./bin/proj_parity
+for t in maths edgegrid proj ballstep stepper flipper flipper_collision \
+         flippersetup flippermotion circlegrid squaregrid component_collision \
+         field throwball installwall edge_response stuck hitwindow fieldwalk \
+         componentstates; do ./bin/${t}_parity || exit 1; done
 ```
 
-What remains is the object graph and the platform shell, not math: the physics
-objects (`TBall`, the edge and flipper types, targets, plunger), the table/scene
-loader, input and UI, the Vulkan renderer, audio, and the vendored
-ImGui/miniaudio/stb sources. Those reference each other through pointers and call
-back into game logic, sprites and timers, so they need an ownership model before
-code moves; issue #15 tracks the phases.
+What remains is structural rather than arithmetic: the component registry and
+event queue, the tilt and multiball policy that spans components, the plunger's
+ball feed, the table/scene loader that still emits C++ objects, input and UI, the
+Vulkan renderer, audio, and the vendored ImGui/miniaudio/stb sources. Those move
+objects and dispatch rather than formulas, so they need the event queue and a
+recorded trace before they can be diffed the way the arithmetic is; issue #15
+tracks the phases.
 
 The ownership model for that graph — one arena-backed owner in Rust,
 generational ids instead of pointers, collisions reported as data and side
