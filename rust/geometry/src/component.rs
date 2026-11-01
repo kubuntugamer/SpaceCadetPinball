@@ -13,7 +13,7 @@
 //! free of loader calls, which is the shape the event queue in the ownership
 //! design (Doc/rust-object-ownership.md, slice 3) will generalise.
 
-use crate::{basic_collision, BallState, Vector2};
+use crate::{basic_collision, normalize, BallState, Vector2};
 
 /// Nothing worth reporting: the rebound was below the soft-hit floor, or the
 /// table was tilted and the response is a plain bounce.
@@ -89,6 +89,41 @@ pub unsafe extern "C" fn scp_collision_resolve(state: *mut CollisionResponse) ->
     resolve(unsafe { &mut *state })
 }
 
+/// `TCircle::EdgeCollision`: where a ball `distance` along its heading ends
+/// up, and the direction from the circle's centre out to that point.
+///
+/// The two values are the contact point and collision direction the shared
+/// response ([`resolve`]) then runs on; a bumper's circle is what turns a
+/// straight approach into an outward bounce.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CircleContact {
+    /// In: the ball's position and heading.
+    pub ball: BallState,
+    /// In: the circle's centre, and how far the ball travels to the contact.
+    pub center: Vector2,
+    pub distance: f32,
+    /// Out: the contact point and the collision direction.
+    pub next_position: Vector2,
+    pub direction: Vector2,
+}
+
+/// Compute the circle's contact point and collision direction, in place.
+pub fn circle_contact(state: &mut CircleContact) {
+    state.next_position.x = state.distance * state.ball.direction.x + state.ball.position.x;
+    state.next_position.y = state.distance * state.ball.direction.y + state.ball.position.y;
+    state.direction.x = state.next_position.x - state.center.x;
+    state.direction.y = state.next_position.y - state.center.y;
+    normalize(&mut state.direction);
+}
+
+/// C entry point for [`circle_contact`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_circle_contact(state: *mut CircleContact) {
+    // SAFETY: the C++ wrapper passes a valid, writable contact struct.
+    circle_contact(unsafe { &mut *state });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +169,26 @@ mod tests {
     fn a_rebound_below_the_soft_floor_reports_nothing() {
         let mut state = incoming(0.1);
         assert_eq!(resolve(&mut state), RESPONSE_NONE);
+    }
+
+    #[test]
+    fn the_circle_contact_is_the_heading_step_then_the_outward_direction() {
+        let mut state = CircleContact {
+            ball: BallState {
+                position: vec2(10.0, 5.0),
+                direction: vec2(1.0, 0.0),
+                speed: 3.0,
+            },
+            center: vec2(20.0, 5.0),
+            distance: 4.0,
+            next_position: Vector2::default(),
+            direction: Vector2::default(),
+        };
+        circle_contact(&mut state);
+        assert_eq!(state.next_position, vec2(14.0, 5.0));
+        // Contact at (14, 5), centre at (20, 5): the direction points inward
+        // along −X, which is how the original spells it.
+        assert_eq!(state.direction, vec2(-1.0, 0.0));
     }
 
     #[test]

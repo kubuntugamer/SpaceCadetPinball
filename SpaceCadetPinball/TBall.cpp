@@ -177,6 +177,27 @@ void TBall::throw_ball(vector3* direction, float angleMult, float speedMult1, fl
 void TBall::EdgeCollision(TBall* ball, float distance)
 {
 	ball->CollisionDisabledFlag = true;
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Both ball states cross together and come back resolved; the disable flag
+	// on the ball that was hit stays here with the rest of its bookkeeping.
+	RustBallPairCollision pair{};
+	pair.First = {{Position.X, Position.Y}, {Direction.X, Direction.Y}, Speed};
+	pair.Second = {{ball->Position.X, ball->Position.Y}, {ball->Direction.X, ball->Direction.Y}, ball->Speed};
+	pair.Distance = distance;
+
+	scp_ball_edge_collision(&pair);
+
+	Position.X = pair.First.Position.X;
+	Position.Y = pair.First.Position.Y;
+	Direction.X = pair.First.Direction.X;
+	Direction.Y = pair.First.Direction.Y;
+	Speed = pair.First.Speed;
+	ball->Position.X = pair.Second.Position.X;
+	ball->Position.Y = pair.Second.Position.Y;
+	ball->Direction.X = pair.Second.Direction.X;
+	ball->Direction.Y = pair.Second.Direction.Y;
+	ball->Speed = pair.Second.Speed;
+#else
 	ball->Position.X += ball->Direction.X * distance;
 	ball->Position.Y += ball->Direction.Y * distance;
 	ball->Direction.X *= ball->Speed;
@@ -200,6 +221,7 @@ void TBall::EdgeCollision(TBall* ball, float distance)
 	Direction.X -= delta.X;
 	Direction.Y -= delta.Y;
 	Speed = maths::normalize_2d(Direction);
+#endif
 }
 
 float TBall::FindCollisionDistance(const ray_type& ray)

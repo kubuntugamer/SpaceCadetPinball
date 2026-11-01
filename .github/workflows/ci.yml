@@ -70,6 +70,9 @@ jobs:
       - name: Compare the Rust wall builder against the C++ reference
         run: ./bin/installwall_parity
 
+      - name: Compare the Rust edge responses against the C++ reference
+        run: ./bin/edge_response_parity
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

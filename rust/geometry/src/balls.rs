@@ -6,7 +6,9 @@
 //! object. Order, ties and the 0.002 skin all match the original: a strict `<`
 //! keeps the earliest ball in list order when two are equidistant.
 
-use crate::{rotate, scp_geometry_ray_intersect_circle, Circle, Ray, Vector2, Vector3};
+use crate::{
+    normalize, rotate, scp_geometry_ray_intersect_circle, BallState, Circle, Ray, Vector2, Vector3,
+};
 
 /// What the selection step needs to know about one [`TBall`](crate::balls::Sphere).
 #[repr(C)]
@@ -108,6 +110,72 @@ pub fn throw_ball(state: &mut ThrowState) {
     state.speed = (1.0 - (state.rand_speed + state.rand_speed))
         * (state.speed_mult1 * state.speed_mult2)
         + state.speed_mult1;
+}
+
+/// `TBall::EdgeCollision`: the response when two balls meet.
+///
+/// The moving ball advances to the contact point, both headings become
+/// velocities, and the pair then exchange projections of those velocities
+/// along the line between their centres -- the moving ball is pushed away
+/// from the contact, the other one takes the equal and opposite kick.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BallPairCollision {
+    /// In/out: the ball already at the contact point (the original's `this`).
+    pub first: BallState,
+    /// In/out: the moving ball (the original's argument), advanced by `distance`.
+    pub second: BallState,
+    /// In: how far the moving ball travels to the contact.
+    pub distance: f32,
+}
+
+/// Apply the ball-versus-ball response to both balls in place.
+pub fn ball_edge_collision(state: &mut BallPairCollision) {
+    let mut moving = state.second;
+    moving.position.x += moving.direction.x * state.distance;
+    moving.position.y += moving.direction.y * state.distance;
+    moving.direction.x *= moving.speed;
+    moving.direction.y *= moving.speed;
+
+    let mut still = state.first;
+    still.direction.x *= still.speed;
+    still.direction.y *= still.speed;
+
+    // AB runs from the resting ball to the moving one, BA the other way.
+    let mut ab = Vector2 {
+        x: moving.position.x - still.position.x,
+        y: moving.position.y - still.position.y,
+    };
+    normalize(&mut ab);
+    let ba = Vector2 {
+        x: -ab.x,
+        y: -ab.y,
+    };
+
+    // Projection of each velocity against the collision direction.
+    let proj_ab = -(moving.direction.x * ab.x + moving.direction.y * ab.y);
+    let proj_ba = -(still.direction.x * ba.x + still.direction.y * ba.y);
+    let delta = Vector2 {
+        x: ab.x * proj_ab - ba.x * proj_ba,
+        y: ab.y * proj_ab - ba.y * proj_ba,
+    };
+
+    moving.direction.x += delta.x;
+    moving.direction.y += delta.y;
+    moving.speed = normalize(&mut moving.direction);
+    still.direction.x -= delta.x;
+    still.direction.y -= delta.y;
+    still.speed = normalize(&mut still.direction);
+
+    state.first = still;
+    state.second = moving;
+}
+
+/// C entry point for [`ball_edge_collision`]: both balls in/out.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_ball_edge_collision(state: *mut BallPairCollision) {
+    // SAFETY: the C++ wrapper passes a valid, writable pair struct.
+    ball_edge_collision(unsafe { &mut *state });
 }
 
 /// C entry point for [`throw_ball`]: heading in/out, speed out.
@@ -308,6 +376,63 @@ mod tests {
         throw_ball(&mut state);
         // (1 - 0.5) * (40 * 0.5) + 40
         assert_eq!(state.speed, 0.5 * (40.0 * 0.5) + 40.0);
+    }
+
+    #[test]
+    fn the_pair_response_advances_to_the_contact_and_splits_the_projections() {
+        let mut state = BallPairCollision {
+            first: BallState {
+                position: Vector2 { x: 0.0, y: 0.0 },
+                direction: Vector2 { x: 1.0, y: 0.0 },
+                speed: 5.0,
+            },
+            second: BallState {
+                position: Vector2 { x: -3.0, y: 0.0 },
+                direction: Vector2 { x: 1.0, y: 0.0 },
+                speed: 2.0,
+            },
+            distance: 1.5,
+        };
+        ball_edge_collision(&mut state);
+
+        // The moving ball lands on the contact point 1.5 along its heading.
+        assert_eq!(state.second.position, Vector2 { x: -1.5, y: 0.0 });
+        // AB points +X after the advance; the moving ball's velocity along it
+        // comes back reflected, the resting one takes the kick.
+        assert!(state.second.speed >= 0.0);
+        assert!(state.first.speed >= 0.0);
+        // Normalise keeps directions unit length, so speed carries the
+        // magnitude: the resting ball started at 5, moved at 2.
+        assert!(state.first.speed > 0.0);
+    }
+
+    #[test]
+    fn head_on_balls_exchange_their_speeds() {
+        // Perfectly head-on: AB is +X, moving velocity +2, resting velocity
+        // -1. The projections swap the magnitudes through the delta.
+        let mut state = BallPairCollision {
+            first: BallState {
+                position: Vector2 { x: 0.0, y: 0.0 },
+                direction: Vector2 { x: -1.0, y: 0.0 },
+                speed: 1.0,
+            },
+            second: BallState {
+                position: Vector2 { x: -2.0, y: 0.0 },
+                direction: Vector2 { x: 1.0, y: 0.0 },
+                speed: 2.0,
+            },
+            distance: 0.0,
+        };
+        ball_edge_collision(&mut state);
+        // AB = second − first = (−2, 0) normalises to (−1, 0); the moving
+        // velocity (2, 0) projects 2 onto it, the resting (−1, 0) projects 1
+        // onto BA = (1, 0); delta = (−1·2 − 1·1, 0) = (−3, 0).
+        // Moving velocity (2,0)+(−3,0) = (−1, 0) -> direction (−1, 0), speed 1.
+        // Resting velocity (−1,0)−(−3,0) = (2, 0) -> direction (1, 0), speed 2.
+        assert_eq!(state.second.direction.x, -1.0);
+        assert_eq!(state.second.speed, 1.0);
+        assert_eq!(state.first.direction.x, 1.0);
+        assert_eq!(state.first.speed, 2.0);
     }
 
     #[test]

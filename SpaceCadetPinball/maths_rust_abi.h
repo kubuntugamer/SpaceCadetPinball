@@ -209,11 +209,46 @@ struct RustThrowBall
 	float Speed;
 };
 
+// Everything `TBall::EdgeCollision` computes when two balls meet: both ball
+// states in/out and the distance the moving ball travels to the contact. The
+// disable flag on the ball that was hit stays on the C++ side with the rest of
+// the ball's bookkeeping.
+struct RustBallPairCollision
+{
+	// In/out: the ball already at the contact point (the original's `this`).
+	RustBallState First;
+	// In/out: the moving ball (the original's argument).
+	RustBallState Second;
+	// In: how far the moving ball travels to the contact.
+	float Distance;
+};
+
+// Everything `TCircle::EdgeCollision` computes: the ball's approach, the
+// circle's centre and the distance in; the contact point and collision
+// direction back out for the shared response to run on.
+struct RustCircleContact
+{
+	// In: the ball's position and heading.
+	RustBallState Ball;
+	// In: the circle's centre and how far the ball travels to the contact.
+	RustVector2 Center;
+	float Distance;
+	// Out: the contact point and collision direction.
+	RustVector2 NextPosition;
+	RustVector2 Direction;
+};
+
 extern "C"
 {
 	// Resolve one collision, writing the ball back through the struct; returns
 	// one of the SCP_COLLISION_* codes above.
 	int32_t scp_collision_resolve(RustCollisionResponse* state);
+
+	// The ball-versus-ball response, writing both balls back.
+	void scp_ball_edge_collision(RustBallPairCollision* state);
+
+	// The circle's contact point and collision direction for one approach.
+	void scp_circle_contact(RustCircleContact* state);
 
 	// Apply the launch jitter: rotate Direction's X/Y, derive Speed.
 	void scp_ball_throw(RustThrowBall* state);
