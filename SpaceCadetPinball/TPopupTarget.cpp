@@ -10,6 +10,7 @@
 #include "TPinballTable.h"
 
 #ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
 #include "maths_rust_abi.h"
 #endif
 
@@ -21,6 +22,28 @@ TPopupTarget::TPopupTarget(TPinballTable* table, int groupIndex) : TCollisionCom
 
 int TPopupTarget::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustPopupState state{};
+	state.Active = ActiveFlag;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.TimerTime = TimerTime;
+	state.MessageField = MessageField;
+	for (int index = 0; index < 4; ++index)
+		state.PlayerMessage[index] = PlayerMessagefieldBackup[index];
+	state.CurrentPlayer = PinballTable->CurrentPlayer;
+	state.PlayerCount = PinballTable->PlayerCount;
+	state.SoftHitSound = SoftHitSoundId;
+	state.HardHitSound = HardHitSoundId;
+	state.Code = static_cast<int32_t>(code);
+	state.Value = value;
+	auto effects = scp_component_popup_message(&state);
+	ActiveFlag = static_cast<char>(state.Active);
+	MessageField = state.MessageField;
+	for (int index = 0; index < 4; ++index)
+		PlayerMessagefieldBackup[index] = state.PlayerMessage[index];
+	component_effects::apply(this, &Timer, TimerExpired, effects, "TPopupTarget");
+	return 0;
+#else
 	switch (code)
 	{
 	case MessageCode::TPopupTargetDisable:
@@ -54,6 +77,7 @@ int TPopupTarget::Message(MessageCode code, float value)
 		break;
 	}
 	return 0;
+#endif
 }
 
 void TPopupTarget::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
@@ -85,13 +109,17 @@ void TPopupTarget::Collision(TBall* ball, vector2* nextPosition, vector2* direct
 	ball->Direction.Y = response.Ball.Direction.Y;
 	ball->Speed = response.Ball.Speed;
 
-	if (code == SCP_COLLISION_HARD_HIT)
-	{
-		if (HardHitSoundId)
-			loader::play_sound(HardHitSoundId, this, "TPopupTarget1");
-		Message(MessageCode::TPopupTargetDisable, 0.0);
-		control::handler(MessageCode::ControlCollision, this);
-	}
+	RustPopupState state{};
+	state.Active = ActiveFlag;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.TimerTime = TimerTime;
+	state.MessageField = MessageField;
+	state.HardHitSound = HardHitSoundId;
+	state.SoftHitSound = SoftHitSoundId;
+	auto effects = scp_component_popup_collision(&state, code == SCP_COLLISION_HARD_HIT ? 1 : 0);
+	ActiveFlag = static_cast<char>(state.Active);
+	MessageField = state.MessageField;
+	component_effects::apply(this, &Timer, TimerExpired, effects, "TPopupTarget");
 #else
 	if (PinballTable->TiltLockFlag)
 	{
@@ -117,6 +145,20 @@ void TPopupTarget::Collision(TBall* ball, vector2* nextPosition, vector2* direct
 void TPopupTarget::TimerExpired(int timerId, void* caller)
 {
 	auto target = static_cast<TPopupTarget*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustPopupState state{};
+	state.Active = target->ActiveFlag;
+	state.TimerArmed = target->Timer ? 1 : 0;
+	state.TimerTime = target->TimerTime;
+	state.MessageField = target->MessageField;
+	state.SoftHitSound = target->SoftHitSoundId;
+	target->Timer = 0;
+	// Only a real timer expiry plays the soft hit sound, which the machine
+	// takes as its `from_timer` argument.
+	auto effects = scp_component_popup_timer(&state, timerId ? 1 : 0);
+	target->ActiveFlag = static_cast<char>(state.Active);
+	component_effects::apply(target, &target->Timer, TimerExpired, effects, "TPopupTarget");
+#else
 	target->Timer = 0;
 	target->ActiveFlag = 1;
 	target->SpriteSet(0);
@@ -125,4 +167,5 @@ void TPopupTarget::TimerExpired(int timerId, void* caller)
 		if (target->SoftHitSoundId)
 			loader::play_sound(target->SoftHitSoundId, target, "TPopupTarget2");
 	}
+#endif
 }

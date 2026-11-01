@@ -7,6 +7,10 @@
 #include "render.h"
 #include "timer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 TBlocker::TBlocker(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, true)
 {
 	visualStruct visual{};
@@ -25,6 +29,21 @@ TBlocker::TBlocker(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 
 int TBlocker::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustBlockerState state{};
+	state.Active = ActiveFlag;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.MessageField = MessageField;
+	state.Sound4 = SoundIndex4;
+	state.Sound3 = SoundIndex3;
+	state.Code = static_cast<int32_t>(code);
+	state.Value = value;
+	auto effects = scp_component_blocker_message(&state);
+	ActiveFlag = static_cast<char>(state.Active);
+	MessageField = state.MessageField;
+	component_effects::apply(this, &Timer, TimerExpired, effects, "TBlocker");
+	return 0;
+#else
 	switch (code)
 	{
 	case MessageCode::SetTiltLock:
@@ -62,11 +81,21 @@ int TBlocker::Message(MessageCode code, float value)
 	}
 	
 	return 0;
+#endif
 }
 
 void TBlocker::TimerExpired(int timerId, void* caller)
 {
 	auto blocker = static_cast<TBlocker*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustBlockerState state{};
+	state.TimerArmed = blocker->Timer ? 1 : 0;
+	blocker->Timer = 0;
+	auto effects = scp_component_blocker_timer(&state);
+	component_effects::apply(blocker, &blocker->Timer, TimerExpired, effects, "TBlocker");
+#else
 	blocker->Timer = 0;
 	control::handler(MessageCode::ControlTimerExpired, blocker);
+#endif
 }

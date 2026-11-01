@@ -11,6 +11,7 @@
 #include "TTableLayer.h"
 
 #ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
 #include "field_rust_abi.h"
 #endif
 
@@ -133,12 +134,55 @@ TRamp::TRamp(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 
 void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
+	(void)direction;
 	ball->not_again(edge);
 	ball->Position.X = nextPosition->X;
 	ball->Position.Y = nextPosition->Y;
 	ball->RayMaxDistance -= distance;
 
 	auto plane = static_cast<ramp_plane_type*>(edge->WallValue);
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Which edge answered decides what this means: a plane puts the ball on the
+	// ramp, the entry line reports the shot, the walls only set the mask and the
+	// height. The plane's own values are copied through, the verdict is the
+	// machine's.
+	RustRampState state{};
+	state.CollisionGroup = CollisionGroup;
+	state.Wall1CollisionGroup = Wall1CollisionGroup;
+	state.Wall2CollisionGroup = Wall2CollisionGroup;
+	state.Wall1BallOffset = Wall1BallOffset;
+	state.Wall2BallOffset = Wall2BallOffset;
+	state.BallZOffsetFlag = BallZOffsetFlag ? 1 : 0;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Edge = edge == Line1 ? 1 : edge == Line2 ? 2 : edge == Line3 ? 3 : 0;
+	state.HasPlane = plane ? 1 : 0;
+	if (plane)
+	{
+		state.PlaneOffset[0] = plane->BallCollisionOffset.X;
+		state.PlaneOffset[1] = plane->BallCollisionOffset.Y;
+		state.PlaneOffset[2] = plane->BallCollisionOffset.Z;
+		state.BallX = ball->Position.X;
+		state.BallY = ball->Position.Y;
+		state.BallRadius = ball->Radius;
+	}
+	auto effects = scp_component_ramp_collision(&state);
+	if (state.SetZ)
+	{
+		ball->Position.Z = state.Z;
+		if (plane)
+		{
+			ball->CollisionOffset = plane->BallCollisionOffset;
+			ball->RampFieldForce.X = plane->FieldForce.X;
+			ball->RampFieldForce.Y = plane->FieldForce.Y;
+		}
+	}
+	if (state.CollisionFlag >= 0)
+		ball->CollisionFlag = state.CollisionFlag;
+	if (state.CollisionMask >= 0)
+		ball->CollisionMask = state.CollisionMask;
+	component_effects::apply(this, nullptr, nullptr, effects, "TRamp", ball);
+#else
 	if (plane)
 	{
 		ball->CollisionFlag = 1;
@@ -177,6 +221,7 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 				ball->Position.Z = ball->Radius + Wall2BallOffset;
 		}
 	}
+#endif
 }
 
 int TRamp::FieldEffect(TBall* ball, vector2* vecDst)

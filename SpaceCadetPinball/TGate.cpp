@@ -6,6 +6,10 @@
 #include "loader.h"
 #include "render.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 TGate::TGate(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, true)
 {
 	visualStruct visual{};
@@ -20,6 +24,19 @@ TGate::TGate(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 
 int TGate::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)value;
+	RustGateState state{};
+	state.Active = ActiveFlag;
+	state.Sound4 = SoundIndex4;
+	state.Sound3 = SoundIndex3;
+	state.Code = static_cast<int32_t>(code);
+	auto effects = scp_component_gate_message(&state);
+	ActiveFlag = static_cast<char>(state.Active);
+	// The original forwards every code to the control handler, handled or not.
+	component_effects::apply(this, nullptr, nullptr, effects, "TGate");
+	return 0;
+#else
 	switch (code)
 	{
 	case MessageCode::TGateDisable:
@@ -39,4 +56,5 @@ int TGate::Message(MessageCode code, float value)
 
 	control::handler(code, this);
 	return 0;
+#endif
 }

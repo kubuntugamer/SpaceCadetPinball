@@ -8,6 +8,10 @@
 #include "timer.h"
 #include "TPinballTable.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 TBumper::TBumper(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, true)
 {
 	visualStruct visual{};
@@ -25,6 +29,39 @@ TBumper::TBumper(TPinballTable* table, int groupIndex) : TCollisionComponent(tab
 
 int TBumper::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustBumperState state{};
+	state.BmpIndex = BmpIndex;
+	state.MaxBmp = static_cast<int>(ListBitmap->size()) - 1;
+	state.MessageField = MessageField;
+	state.Threshold = Threshold;
+	state.OriginalThreshold = OriginalThreshold;
+	state.TimerTime = TimerTime;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.Sound4 = SoundIndex4;
+	state.Sound3 = SoundIndex3;
+	for (int index = 0; index < 4; ++index)
+	{
+		state.PlayerBmp[index] = PlayerData[index].BmpIndex;
+		state.PlayerMessage[index] = PlayerData[index].MessageField;
+	}
+	state.CurrentPlayer = PinballTable->CurrentPlayer;
+	state.Code = static_cast<int32_t>(code);
+	state.Value = value;
+	// The bumper's set/inc/dec messages recurse into each other in the
+	// original; the machine runs that recursion itself.
+	auto effects = scp_component_bumper_message(&state);
+	BmpIndex = state.BmpIndex;
+	MessageField = state.MessageField;
+	Threshold = state.Threshold;
+	for (int index = 0; index < 4; ++index)
+	{
+		PlayerData[index].BmpIndex = state.PlayerBmp[index];
+		PlayerData[index].MessageField = state.PlayerMessage[index];
+	}
+	component_effects::apply(this, &Timer, TimerExpired, effects, "TBumper");
+	return 0;
+#else
 	switch (code)
 	{
 	case MessageCode::TBumperSetBmpIndex:
@@ -98,23 +135,57 @@ int TBumper::Message(MessageCode code, float value)
 	}
 
 	return 0;
+#endif
 }
 
 void TBumper::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
+	(void)distance;
+	(void)edge;
+#ifdef SCP_USE_RUST_GEOMETRY
+	auto hit = DefaultCollision(ball, nextPosition, direction) ? 1 : 0;
+	RustBumperState state{};
+	state.BmpIndex = BmpIndex;
+	state.MaxBmp = static_cast<int>(ListBitmap->size()) - 1;
+	state.MessageField = MessageField;
+	state.Threshold = Threshold;
+	state.OriginalThreshold = OriginalThreshold;
+	state.TimerTime = TimerTime;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.Sound4 = SoundIndex4;
+	state.Sound3 = SoundIndex3;
+	auto effects = scp_component_bumper_collision(&state, hit);
+	BmpIndex = state.BmpIndex;
+	Threshold = state.Threshold;
+	component_effects::apply(this, &Timer, TimerExpired, effects, "TBumper");
+#else
 	if (DefaultCollision(ball, nextPosition, direction))
 	{
 		Fire();
 		control::handler(MessageCode::ControlCollision, this);
 	}
+#endif
 }
 
 void TBumper::TimerExpired(int timerId, void* caller)
 {
 	auto bump = static_cast<TBumper*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustBumperState state{};
+	state.BmpIndex = bump->BmpIndex;
+	state.Threshold = bump->Threshold;
+	state.OriginalThreshold = bump->OriginalThreshold;
+	state.TimerArmed = bump->Timer ? 1 : 0;
+	bump->Timer = 0;
+	auto effects = scp_component_bumper_timer(&state);
+	bump->Threshold = state.Threshold;
+	component_effects::apply(bump, &bump->Timer, TimerExpired, effects, "TBumper");
+#else
 	bump->SpriteSet(bump->BmpIndex * 2);
 	bump->Timer = 0;
 	bump->Threshold = bump->OriginalThreshold;
+#endif
 }
 
 void TBumper::Fire()

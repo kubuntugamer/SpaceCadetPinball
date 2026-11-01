@@ -11,6 +11,10 @@
 #include "timer.h"
 #include "TPinballTable.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 TRollover::TRollover(TPinballTable* table, int groupIndex, bool createWall) : TCollisionComponent(
 	table, groupIndex, createWall)
 {
@@ -26,6 +30,20 @@ TRollover::TRollover(TPinballTable* table, int groupIndex) : TCollisionComponent
 
 int TRollover::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)value;
+	RustRolloverState state{};
+	state.Active = ActiveFlag;
+	state.RolloverFlag = RolloverFlag;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	state.Code = static_cast<int32_t>(code);
+	auto effects = scp_component_rollover_message(&state);
+	ActiveFlag = static_cast<char>(state.Active);
+	RolloverFlag = static_cast<char>(state.RolloverFlag);
+	component_effects::apply(this, nullptr, nullptr, effects, "TRollover");
+	return 0;
+#else
 	if (code == MessageCode::Reset)
 	{
 		ActiveFlag = 1;
@@ -33,6 +51,7 @@ int TRollover::Message(MessageCode code, float value)
 		SpriteSet(0);
 	}
 	return 0;
+#endif
 }
 
 void TRollover::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
@@ -43,6 +62,20 @@ void TRollover::Collision(TBall* ball, vector2* nextPosition, vector2* direction
 	ball->RayMaxDistance -= distance;
 	ball->not_again(edge);
 	
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)direction;
+	// The lane re-arms itself on a short timer it never stores, so the handle
+	// `timer::set` returns is dropped here exactly as it was in the original.
+	RustRolloverState state{};
+	state.Active = ActiveFlag;
+	state.RolloverFlag = RolloverFlag;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	auto effects = scp_component_rollover_collision(&state);
+	ActiveFlag = static_cast<char>(state.Active);
+	RolloverFlag = static_cast<char>(state.RolloverFlag);
+	component_effects::apply(this, nullptr, nullptr, effects, "TRollover", ball);
+#else
 	if (!PinballTable->TiltLockFlag)
 	{
 		if (RolloverFlag)
@@ -58,6 +91,7 @@ void TRollover::Collision(TBall* ball, vector2* nextPosition, vector2* direction
 		RolloverFlag = RolloverFlag == 0;
 		SpriteSet(RolloverFlag ? -1 : 0);
 	}
+#endif
 }
 
 void TRollover::build_walls(int groupIndex)
@@ -74,5 +108,16 @@ void TRollover::build_walls(int groupIndex)
 void TRollover::TimerExpired(int timerId, void* caller)
 {
 	auto roll = static_cast<TRollover*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustRolloverState state{};
+	state.Active = roll->ActiveFlag;
+	state.RolloverFlag = roll->RolloverFlag;
+	state.TimerArmed = 1;
+	auto effects = scp_component_rollover_timer(&state);
+	roll->ActiveFlag = static_cast<char>(state.Active);
+	component_effects::apply(roll, nullptr, nullptr, effects, "TRollover");
+#else
 	roll->ActiveFlag = 1;
+#endif
 }

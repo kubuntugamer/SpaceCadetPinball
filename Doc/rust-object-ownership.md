@@ -348,16 +348,32 @@ Concretely, ported and covered by a differential test:
   control points, stepping, angle delta, distance, the front/back collision
   response, and the per-substep bookkeeping that advances the swing or gives it
   ground when it hit a ball;
+* slice 5, in part — the state machines of fifteen components (bumper, popup
+  target, solo target, blocker, gate, kickback, drain, rollover, light rollover,
+  tripwire, sink, kickout, spinner, ramp and hole): what each one does about a
+  message, a resolved hit or a timer, as a set of effects rather than the calls
+  themselves;
 * every component response and field force (`default_collision`,
   `basic_collision`, table/ramp/kickout/hole fields), the wall builder, and the
   projection.
 
+The component machines are the first slice-5 piece that moves decision rather
+than arithmetic, and they set the shape for the rest. Each keeps its C++ object:
+the host packs the fields the machine reads into one `#[repr(C)]` struct, the
+machine changes them and returns a `RustEffects` -- the sprite, sound, control
+code and timer the original went on to call -- and `component_effects.h` runs
+those on the host's side, so the registry, the sprite handles and the timer list
+stay where they are. That is the slice-3 event queue in miniature, and the
+reason it can land before slice 3 exists.
+
 What remains is structural rather than arithmetic: the component registry and
-event queue (slice 3), the per-component state machines (slice 5) and the loader
-that emits a `World` directly (slice 6). Those move objects and dispatch rather
-than formulas, so they need the slice-3 event queue and a recorded trace before
-they can be diffed the way the arithmetic was — the stop rule below is what keeps
-the ported formulas from being re-opened while they land.
+event queue (slice 3), the tilt and multiball policy that spans components plus
+the plunger's ball feed -- both of which create balls and touch table counters,
+so they belong with slice 3 -- and the
+loader that emits a `World` directly (slice 6). Those move objects and dispatch
+rather than formulas, so they need the slice-3 event queue and a recorded trace
+before they can be diffed the way the arithmetic was — the stop rule below is
+what keeps the ported formulas from being re-opened while they land.
 
 **Ordering rationale.** Slices 1–2 remove most pointer traffic (every wall edge
 and every ball) while leaving behaviour in C++ behind a pure callback, so the

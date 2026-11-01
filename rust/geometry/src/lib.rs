@@ -15,6 +15,7 @@ pub mod balls;
 pub mod ballstep;
 pub mod circle_grid;
 pub mod component;
+pub mod components;
 pub mod field;
 pub mod flipper;
 pub mod grid;

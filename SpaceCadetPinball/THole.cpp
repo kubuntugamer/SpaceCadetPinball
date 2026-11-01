@@ -11,6 +11,10 @@
 #include "TPinballTable.h"
 #include "TTableLayer.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, false)
 {
 	visualStruct visual{};
@@ -59,6 +63,22 @@ THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 
 int THole::Message(MessageCode code, float value)
 {
+	(void)value;
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustHoleState state{};
+	state.Captured = BallCapturedFlag ? 1 : 0;
+	state.SecondStage = BallCapturedSecondStage ? 1 : 0;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.CaptureTime = pb::FullTiltMode ? 0.0f : 0.5f;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	state.HardHitSound = HardHitSoundId;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Code = static_cast<int32_t>(code);
+	auto effects = scp_component_hole_message(&state);
+	BallCapturedSecondStage = state.SecondStage != 0;
+	component_effects::apply(this, &Timer, TimerExpired, effects, "THole");
+	return 0;
+#else
 	if (code == MessageCode::Reset && BallCapturedFlag)
 	{
 		if (Timer)
@@ -67,10 +87,40 @@ int THole::Message(MessageCode code, float value)
 		BallCapturedSecondStage = true;
 	}
 	return 0;
+#endif
 }
 
 void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
+	(void)distance;
+	(void)edge;
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustHoleState state{};
+	state.Captured = BallCapturedFlag ? 1 : 0;
+	state.SecondStage = BallCapturedSecondStage ? 1 : 0;
+	state.TimerArmed = Timer ? 1 : 0;
+	// The ramp hole in Full Tilt takes the ball with no delay at all.
+	state.CaptureTime = pb::FullTiltMode ? 0.0f : 0.5f;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	state.HardHitSound = HardHitSoundId;
+	state.SoftHitSound = SoftHitSoundId;
+	auto effects = scp_component_hole_collision(&state);
+	BallCapturedFlag = state.Captured != 0;
+	BallCapturedSecondStage = state.SecondStage != 0;
+
+	if (state.CaptureBall)
+	{
+		ball->CollisionComp = this;
+		ball->Position.X = Circle.Center.X;
+		ball->Position.Y = Circle.Center.Y;
+		ball->Direction.Z = 0.0;
+		ball->CollisionDisabledFlag = true;
+	}
+	if (state.DefaultCollision)
+		DefaultCollision(ball, nextPosition, direction);
+
+	component_effects::apply(this, &Timer, TimerExpired, effects, "THole", ball);
+#else
 	if (!BallCapturedFlag)
 	{
 		BallCapturedSecondStage = false;
@@ -96,6 +146,7 @@ void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 	{
 		DefaultCollision(ball, nextPosition, direction);
 	}
+#endif
 }
 
 int THole::FieldEffect(TBall* ball, vector2* vecDst)
@@ -191,6 +242,22 @@ int THole::FieldEffect(TBall* ball, vector2* vecDst)
 void THole::TimerExpired(int timerId, void* caller)
 {
 	auto hole = static_cast<THole*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustHoleState state{};
+	state.Captured = hole->BallCapturedFlag ? 1 : 0;
+	state.SecondStage = hole->BallCapturedSecondStage ? 1 : 0;
+	state.TimerArmed = 1;
+	state.CaptureTime = pb::FullTiltMode ? 0.0f : 0.5f;
+	state.Tilt = hole->PinballTable->TiltLockFlag ? 1 : 0;
+	state.HardHitSound = hole->HardHitSoundId;
+	state.SoftHitSound = hole->SoftHitSoundId;
+	auto effects = scp_component_hole_timer(&state);
+	hole->Timer = 0;
+	hole->BallCapturedSecondStage = state.SecondStage != 0;
+	component_effects::apply(hole, &hole->Timer, TimerExpired, effects, "THole");
+#else
 	hole->Timer = 0;
 	hole->BallCapturedSecondStage = true;
+#endif
 }

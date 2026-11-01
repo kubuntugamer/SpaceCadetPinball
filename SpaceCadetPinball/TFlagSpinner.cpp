@@ -10,6 +10,10 @@
 #include "TLine.h"
 #include "TPinballTable.h"
 
+#ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
+#endif
+
 TFlagSpinner::TFlagSpinner(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, false)
 {
 	visualStruct visual{};
@@ -52,6 +56,27 @@ TFlagSpinner::TFlagSpinner(TPinballTable* table, int groupIndex) : TCollisionCom
 
 int TFlagSpinner::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)value;
+	RustSpinnerState state{};
+	state.Speed = Speed;
+	state.MaxSpeed = MaxSpeed;
+	state.MinSpeed = MinSpeed;
+	state.SpeedDecrement = SpeedDecrement;
+	state.SpinDirection = SpinDirection;
+	state.BmpIndex = BmpIndex;
+	state.BmpCount = static_cast<int>(ListBitmap->size());
+	state.TimerArmed = Timer ? 1 : 0;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Code = static_cast<int32_t>(code);
+	auto effects = scp_component_spinner_message(&state);
+	BmpIndex = state.BmpIndex;
+	// No timer handle (nullptr): the original never stored the id `timer::set`
+	// returned for a spin frame, so its `Reset` killed nothing. Storing it here
+	// would make a reset stop a swing it used to let run out.
+	component_effects::apply(this, nullptr, SpinTimer, effects, "TFlagSpinner");
+	return 0;
+#else
 	if (code == MessageCode::Reset)
 	{
 		if (Timer)
@@ -63,6 +88,7 @@ int TFlagSpinner::Message(MessageCode code, float value)
 		SpriteSet(BmpIndex);
 	}
 	return 0;
+#endif
 }
 
 void TFlagSpinner::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
@@ -73,6 +99,30 @@ void TFlagSpinner::Collision(TBall* ball, vector2* nextPosition, vector2* direct
 	ball->RayMaxDistance = ball->RayMaxDistance - distance;
 	ball->not_again(edge);
 
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)direction;
+	RustSpinnerState state{};
+	state.Speed = Speed;
+	state.MaxSpeed = MaxSpeed;
+	state.MinSpeed = MinSpeed;
+	state.SpeedDecrement = SpeedDecrement;
+	state.SpinDirection = SpinDirection;
+	state.BmpIndex = BmpIndex;
+	state.BmpCount = static_cast<int>(ListBitmap->size());
+	state.TimerArmed = Timer ? 1 : 0;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	state.BallSpeed = ball->Speed;
+	state.StruckOtherFace = PrevCollider != edge ? 1 : 0;
+	auto effects = scp_component_spinner_collision(&state);
+	Speed = state.Speed;
+	SpinDirection = state.SpinDirection;
+	BmpIndex = state.BmpIndex;
+	// No timer handle (nullptr): the original never stored the id `timer::set`
+	// returned for a spin frame, so its `Reset` killed nothing. Storing it here
+	// would make a reset stop a swing it used to let run out.
+	component_effects::apply(this, nullptr, SpinTimer, effects, "TFlagSpinner");
+#else
 	SpinDirection = 2 * (PrevCollider != edge) - 1;
 	if (ball->Speed == 0.0f)
 		Speed = MinSpeed;
@@ -83,10 +133,32 @@ void TFlagSpinner::Collision(TBall* ball, vector2* nextPosition, vector2* direct
 	if (Speed > MaxSpeed)
 		Speed = MaxSpeed;
 	NextFrame();
+#endif
 }
 
 void TFlagSpinner::NextFrame()
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustSpinnerState state{};
+	state.Speed = Speed;
+	state.MaxSpeed = MaxSpeed;
+	state.MinSpeed = MinSpeed;
+	state.SpeedDecrement = SpeedDecrement;
+	state.SpinDirection = SpinDirection;
+	state.BmpIndex = BmpIndex;
+	state.BmpCount = static_cast<int>(ListBitmap->size());
+	state.TimerArmed = Timer ? 1 : 0;
+	state.SoftHitSound = SoftHitSoundId;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	auto effects = scp_component_spinner_next_frame(&state);
+	Speed = state.Speed;
+	SpinDirection = state.SpinDirection;
+	BmpIndex = state.BmpIndex;
+	// No timer handle (nullptr): the original never stored the id `timer::set`
+	// returned for a spin frame, so its `Reset` killed nothing. Storing it here
+	// would make a reset stop a swing it used to let run out.
+	component_effects::apply(this, nullptr, SpinTimer, effects, "TFlagSpinner");
+#else
 	BmpIndex += SpinDirection;
 	int bmpIndex = BmpIndex;
 	int bmpCount = static_cast<int>(ListBitmap->size());
@@ -110,6 +182,7 @@ void TFlagSpinner::NextFrame()
 	{
 		timer::set(1.0f / Speed, this, SpinTimer);
 	}
+#endif
 }
 
 void TFlagSpinner::SpinTimer(int timerId, void* caller)

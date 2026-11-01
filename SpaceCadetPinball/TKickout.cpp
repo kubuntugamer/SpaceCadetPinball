@@ -12,8 +12,62 @@
 #include "TTableLayer.h"
 
 #ifdef SCP_USE_RUST_GEOMETRY
+#include "component_effects.h"
 #include "field_rust_abi.h"
 #endif
+
+namespace
+{
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Runs what the kickout's machine asked for. The throw is the host's half:
+	// put the held ball back at its own height, let it go and drop the pointer.
+	// The original arms the reset timer before it throws, which is the order
+	// kept here.
+	void apply_kickout(TKickout* kick, const RustKickoutState& state)
+	{
+		const auto& effects = state.Effects;
+		if (effects.Sprite != SCP_NO_SPRITE)
+			kick->SpriteSet(effects.Sprite);
+
+		if (effects.TimerKill != 0 && kick->Timer)
+		{
+			timer::kill(kick->Timer);
+			kick->Timer = 0;
+		}
+
+		if (effects.TimerSet != 0)
+		{
+			// Two timers share this one handle: the restart that holds a ball,
+			// and the short delay after the throw. The machine names which.
+			auto callback = state.RestartTimer ? TKickout::TimerExpired : TKickout::ResetTimerExpired;
+			kick->Timer = timer::set(effects.TimerDelay, kick, callback);
+		}
+
+		if (state.ThrowBall && kick->Ball)
+		{
+			if (effects.Sound)
+				loader::play_sound(effects.Sound, kick->Ball, "TKickout2");
+			kick->Ball->Position.Z = kick->OriginalBallZ;
+			kick->Ball->throw_ball(&kick->BallThrowDirection, kick->ThrowAngleMult,
+			                       kick->ThrowSpeedMult1, kick->ThrowSpeedMult2);
+			kick->Ball = nullptr;
+		}
+		else if (effects.Sound)
+		{
+			// The capture sound belongs to the ball, as in the original; the
+			// kickout stands in only if there is none to hand.
+			loader::play_sound(effects.Sound,
+				kick->Ball ? static_cast<TPinballComponent*>(kick->Ball) : kick, "TKickout1");
+		}
+
+		if (state.Active >= 0)
+			kick->ActiveFlag = static_cast<char>(state.Active);
+
+		if (effects.Control != 0)
+			control::handler(static_cast<MessageCode>(effects.Control), kick);
+	}
+#endif
+}
 
 TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollisionComponent(
 	table, groupIndex, false)
@@ -66,6 +120,24 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 
 int TKickout::Message(MessageCode code, float value)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	RustKickoutState state{};
+	state.Captured = BallCaputeredFlag;
+	state.NotSomeFlag = NotSomeFlag;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.TimerTime1 = TimerTime1;
+	state.TimerTime2 = TimerTime2;
+	state.Threshold = Threshold;
+	state.SoftHitSound = SoftHitSoundId;
+	state.HardHitSound = HardHitSoundId;
+	state.Code = static_cast<int32_t>(code);
+	state.Value = value;
+	scp_component_kickout_message(&state);
+	BallCaputeredFlag = state.Captured;
+	Threshold = state.Threshold;
+	apply_kickout(this, state);
+	return 0;
+#else
 	switch (code)
 	{
 	case MessageCode::TKickoutRestartTimer:
@@ -95,10 +167,47 @@ int TKickout::Message(MessageCode code, float value)
 	}
 
 	return 0;
+#endif
 }
 
 void TKickout::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)direction;
+	if (BallCaputeredFlag)
+	{
+		// A second hit on a held ball is just an advance to the contact point.
+		ball->Position.X = nextPosition->X;
+		ball->Position.Y = nextPosition->Y;
+		ball->RayMaxDistance -= distance;
+		ball->not_again(edge);
+		return;
+	}
+
+	RustKickoutState state{};
+	state.NotSomeFlag = NotSomeFlag;
+	state.TimerArmed = Timer ? 1 : 0;
+	state.TimerTime1 = TimerTime1;
+	state.TimerTime2 = TimerTime2;
+	state.Threshold = Threshold;
+	state.SoftHitSound = SoftHitSoundId;
+	state.HardHitSound = HardHitSoundId;
+	state.Tilt = PinballTable->TiltLockFlag ? 1 : 0;
+	scp_component_kickout_collision(&state);
+
+	// The host's half of a capture.
+	Ball = ball;
+	BallCaputeredFlag = state.Captured;
+	Threshold = state.Threshold;
+	ball->CollisionComp = this;
+	ball->Position.X = Circle.Center.X;
+	ball->Position.Y = Circle.Center.Y;
+	OriginalBallZ = ball->Position.Z;
+	ball->Position.Z = CollisionBallSetZ;
+	ball->CollisionDisabledFlag = true;
+
+	apply_kickout(this, state);
+#else
 	if (!BallCaputeredFlag)
 	{
 		Ball = ball;
@@ -127,6 +236,7 @@ void TKickout::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 		ball->RayMaxDistance -= distance;
 		ball->not_again(edge);
 	}
+#endif
 }
 
 int TKickout::FieldEffect(TBall* ball, vector2* dstVec)
@@ -169,6 +279,21 @@ int TKickout::FieldEffect(TBall* ball, vector2* dstVec)
 void TKickout::TimerExpired(int timerId, void* caller)
 {
 	auto kick = static_cast<TKickout*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustKickoutState state{};
+	state.Captured = kick->BallCaputeredFlag;
+	state.NotSomeFlag = kick->NotSomeFlag;
+	state.TimerArmed = kick->Timer ? 1 : 0;
+	state.TimerTime1 = kick->TimerTime1;
+	state.TimerTime2 = kick->TimerTime2;
+	state.Threshold = kick->Threshold;
+	state.HardHitSound = kick->HardHitSoundId;
+	kick->Timer = 0;
+	scp_component_kickout_timer(&state);
+	kick->BallCaputeredFlag = state.Captured;
+	apply_kickout(kick, state);
+#else
 	if (kick->BallCaputeredFlag)
 	{
 		kick->BallCaputeredFlag = 0;
@@ -183,12 +308,23 @@ void TKickout::TimerExpired(int timerId, void* caller)
 			kick->Ball = nullptr;
 		}
 	}
+#endif
 }
 
 void TKickout::ResetTimerExpired(int timerId, void* caller)
 {
 	auto kick = static_cast<TKickout*>(caller);
+#ifdef SCP_USE_RUST_GEOMETRY
+	(void)timerId;
+	RustKickoutState state{};
+	state.NotSomeFlag = kick->NotSomeFlag;
+	kick->Timer = 0;
+	scp_component_kickout_reset_timer(&state);
+	if (state.Active >= 0)
+		kick->ActiveFlag = static_cast<char>(state.Active);
+#else
 	if (!kick->NotSomeFlag)
 		kick->ActiveFlag = 1;
 	kick->Timer = 0;
+#endif
 }

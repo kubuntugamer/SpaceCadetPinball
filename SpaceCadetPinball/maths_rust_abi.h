@@ -8,6 +8,7 @@
 // can call the Rust functions directly and compare them against the original C++
 // implementation.
 
+#include <cstddef>
 #include <cstdint>
 
 struct RustVector2
@@ -288,6 +289,262 @@ struct RustFlipperSweep
 	int32_t ControlPointDirty;
 };
 
+// What the host must do after one of the component state machines ran. The
+// sprite is `SCP_NO_SPRITE` when the original wrote none, which is not the same
+// as -1 (hide); the sound is 0 when none plays; a control code is the
+// `MessageCode` to hand `control::handler`, and `Control2` carries the spinner's
+// second one.
+#define SCP_NO_SPRITE INT32_MIN
+
+struct RustEffects
+{
+	int32_t Sprite;
+	int32_t Sound;
+	int32_t Control;
+	int32_t Control2;
+	int32_t TimerSet;
+	int32_t TimerKill;
+	float TimerDelay;
+	// The second timer, only `TLightRollover` holds two at once: `TimerSet` is
+	// its hide delay, `Timer2Set` the lane's own re-arm.
+	int32_t Timer2Set;
+	float Timer2Delay;
+};
+
+struct RustLightRolloverState
+{
+	int32_t Active;
+	int32_t RolloverFlag;
+	int32_t HideTimerArmed;
+	float HideDelay;
+	int32_t SoftHitSound;
+	int32_t Tilt;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustRampState
+{
+	int32_t CollisionGroup;
+	int32_t Wall1CollisionGroup;
+	int32_t Wall2CollisionGroup;
+	float Wall1BallOffset;
+	float Wall2BallOffset;
+	int32_t BallZOffsetFlag;
+	int32_t Tilt;
+	int32_t SoftHitSound;
+	// 1 the entry line, 2 and 3 the two walls; a plane edge is named by
+	// `HasPlane` instead, since several edges share each plane.
+	int32_t Edge;
+	int32_t HasPlane;
+	float PlaneOffset[3];
+	float BallX;
+	float BallY;
+	float BallRadius;
+	// -1 means "write nothing", which is not the same as zero.
+	int32_t CollisionFlag;
+	int32_t CollisionMask;
+	int32_t SetZ;
+	float Z;
+	RustEffects Effects;
+};
+
+struct RustHoleState
+{
+	int32_t Captured;
+	int32_t SecondStage;
+	int32_t TimerArmed;
+	float CaptureTime;
+	int32_t Tilt;
+	int32_t HardHitSound;
+	int32_t SoftHitSound;
+	int32_t Code;
+	RustEffects Effects;
+	int32_t CaptureBall;
+	int32_t DefaultCollision;
+};
+
+struct RustBumperState
+{
+	int32_t BmpIndex;
+	int32_t MaxBmp;
+	int32_t MessageField;
+	float Threshold;
+	float OriginalThreshold;
+	float TimerTime;
+	int32_t TimerArmed;
+	int32_t Sound4;
+	int32_t Sound3;
+	int32_t PlayerBmp[4];
+	int32_t PlayerMessage[4];
+	int32_t CurrentPlayer;
+	int32_t Code;
+	float Value;
+	RustEffects Effects;
+};
+
+struct RustPopupState
+{
+	int32_t Active;
+	int32_t TimerArmed;
+	float TimerTime;
+	int32_t MessageField;
+	int32_t PlayerMessage[4];
+	int32_t CurrentPlayer;
+	int32_t PlayerCount;
+	int32_t SoftHitSound;
+	int32_t HardHitSound;
+	int32_t Code;
+	float Value;
+	RustEffects Effects;
+};
+
+struct RustSoloTargetState
+{
+	int32_t Active;
+	int32_t TimerArmed;
+	float TimerTime;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustBlockerState
+{
+	int32_t Active;
+	int32_t TimerArmed;
+	int32_t MessageField;
+	int32_t Sound4;
+	int32_t Sound3;
+	int32_t Code;
+	float Value;
+	RustEffects Effects;
+};
+
+struct RustGateState
+{
+	int32_t Active;
+	int32_t Sound4;
+	int32_t Sound3;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustKickbackState
+{
+	int32_t TimerArmed;
+	float TimerTime;
+	float TimerTime2;
+	int32_t KickActive;
+	float Threshold;
+	int32_t Tilt;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustDrainState
+{
+	int32_t TimerArmed;
+	float TimerTime;
+	int32_t MultiballCount;
+	int32_t BallInDrain;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustRolloverState
+{
+	int32_t Active;
+	int32_t RolloverFlag;
+	int32_t TimerArmed;
+	int32_t SoftHitSound;
+	int32_t Tilt;
+	int32_t Code;
+	RustEffects Effects;
+};
+
+struct RustTripwireState
+{
+	int32_t SoftHitSound;
+	int32_t Tilt;
+	RustEffects Effects;
+};
+
+struct RustSinkState
+{
+	int32_t MessageField;
+	int32_t PlayerMessage[4];
+	int32_t CurrentPlayer;
+	float TimerTime;
+	int32_t Tilt;
+	int32_t Sound4;
+	int32_t Sound3;
+	int32_t Code;
+	float Value;
+	int32_t BallAtSpawn;
+	RustEffects Effects;
+	int32_t DelegateToDrain;
+	int32_t SpawnBall;
+};
+
+struct RustKickoutState
+{
+	int32_t Captured;
+	int32_t NotSomeFlag;
+	int32_t TimerArmed;
+	float TimerTime1;
+	float TimerTime2;
+	float Threshold;
+	int32_t Tilt;
+	int32_t SoftHitSound;
+	int32_t HardHitSound;
+	int32_t Code;
+	float Value;
+	RustEffects Effects;
+	// Non-zero for the timer that holds a ball, zero for the one that releases
+	// it: the kickout is the only component with two timer meanings.
+	int32_t RestartTimer;
+	int32_t ThrowBall;
+	int32_t Active;
+};
+
+// The sizes `scp_component_sizes` reports, in the order it fills them.
+struct RustComponentSizes
+{
+	size_t Bumper;
+	size_t Popup;
+	size_t SoloTarget;
+	size_t Blocker;
+	size_t Gate;
+	size_t Kickback;
+	size_t Drain;
+	size_t Rollover;
+	size_t Tripwire;
+	size_t Sink;
+	size_t Kickout;
+	size_t Spinner;
+	size_t LightRollover;
+	size_t Ramp;
+	size_t Hole;
+};
+
+struct RustSpinnerState
+{
+	float Speed;
+	float MaxSpeed;
+	float MinSpeed;
+	float SpeedDecrement;
+	int32_t SpinDirection;
+	int32_t BmpIndex;
+	int32_t BmpCount;
+	int32_t TimerArmed;
+	int32_t Tilt;
+	int32_t SoftHitSound;
+	int32_t Code;
+	float BallSpeed;
+	int32_t StruckOtherFace;
+	RustEffects Effects;
+};
+
 // Everything `TBall::EdgeCollision` computes when two balls meet: both ball
 // states in/out and the distance the moving ball travels to the contact. The
 // disable flag on the ball that was hit stays on the C++ side with the rest of
@@ -372,6 +629,53 @@ extern "C"
 
 	// Apply one substep's flipper motion bookkeeping.
 	void scp_flipper_sweep(RustFlipperSweep* state);
+
+	// The component state machines. Each hands its own state in and gets back
+	// what the host must do about it -- a sprite, a sound, a control code and
+	// the timer it arms -- so the component object stays host-side.
+	RustEffects scp_component_bumper_message(RustBumperState* state);
+	RustEffects scp_component_bumper_timer(RustBumperState* state);
+	RustEffects scp_component_bumper_collision(RustBumperState* state, int32_t hit);
+	RustEffects scp_component_popup_message(RustPopupState* state);
+	RustEffects scp_component_popup_timer(RustPopupState* state, int32_t fromTimer);
+	RustEffects scp_component_popup_collision(RustPopupState* state, int32_t hardHit);
+	RustEffects scp_component_solo_message(RustSoloTargetState* state);
+	RustEffects scp_component_solo_collision(RustSoloTargetState* state, int32_t hit);
+	RustEffects scp_component_solo_timer(RustSoloTargetState* state);
+	RustEffects scp_component_blocker_message(RustBlockerState* state);
+	RustEffects scp_component_blocker_timer(RustBlockerState* state);
+	RustEffects scp_component_gate_message(RustGateState* state);
+	RustEffects scp_component_kickback_message(RustKickbackState* state);
+	RustEffects scp_component_kickback_collision(RustKickbackState* state, int32_t hit);
+	RustEffects scp_component_kickback_timer(RustKickbackState* state);
+	RustEffects scp_component_drain_message(RustDrainState* state);
+	RustEffects scp_component_drain_collision(RustDrainState* state);
+	RustEffects scp_component_drain_timer(RustDrainState* state);
+	RustEffects scp_component_rollover_message(RustRolloverState* state);
+	RustEffects scp_component_rollover_collision(RustRolloverState* state);
+	RustEffects scp_component_rollover_timer(RustRolloverState* state);
+	RustEffects scp_component_tripwire_collision(RustTripwireState* state);
+	RustEffects scp_component_sink_message(RustSinkState* state);
+	RustEffects scp_component_sink_collision(RustSinkState* state);
+	RustEffects scp_component_sink_timer(RustSinkState* state);
+	RustEffects scp_component_kickout_message(RustKickoutState* state);
+	RustEffects scp_component_kickout_collision(RustKickoutState* state);
+	RustEffects scp_component_kickout_timer(RustKickoutState* state);
+	RustEffects scp_component_kickout_reset_timer(RustKickoutState* state);
+	RustEffects scp_component_spinner_message(RustSpinnerState* state);
+	RustEffects scp_component_spinner_collision(RustSpinnerState* state);
+	RustEffects scp_component_spinner_next_frame(RustSpinnerState* state);
+	RustEffects scp_component_lightrollover_message(RustLightRolloverState* state);
+	RustEffects scp_component_lightrollover_collision(RustLightRolloverState* state);
+	RustEffects scp_component_lightrollover_hide_timer(RustLightRolloverState* state);
+	RustEffects scp_component_ramp_collision(RustRampState* state);
+	RustEffects scp_component_hole_message(RustHoleState* state);
+	RustEffects scp_component_hole_collision(RustHoleState* state);
+	RustEffects scp_component_hole_timer(RustHoleState* state);
+
+	// The size of each state struct above, so the mirrors this header declares
+	// are checked against the definitions they stand in for.
+	void scp_component_sizes(RustComponentSizes* sizes);
 
 	// The circle's contact point and collision direction for one approach.
 	void scp_circle_contact(RustCircleContact* state);
