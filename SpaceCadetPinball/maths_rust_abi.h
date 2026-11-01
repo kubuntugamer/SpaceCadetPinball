@@ -276,6 +276,12 @@ extern "C"
 	// Decide the stuck-ball bookkeeping for one frame.
 	void scp_ball_stuck_check(RustStuckCheck* state);
 
+	// Record a collision in the ball's 16-slot window (`TBall::not_again`), and
+	// ask whether one is already there (`TBall::already_hit`). The window is the
+	// ball's own array; entries are edge identities, not pointers.
+	void scp_ball_not_again(uint64_t* window, int32_t* count, uint64_t edge);
+	int32_t scp_ball_already_hit(const uint64_t* window, int32_t count, uint64_t edge);
+
 	// The ball-versus-ball response, writing both balls back.
 	void scp_ball_edge_collision(RustBallPairCollision* state);
 

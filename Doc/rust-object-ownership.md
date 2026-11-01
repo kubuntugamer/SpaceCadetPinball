@@ -332,6 +332,31 @@ Rough effort: slice 1 ~600 Rust / 150 C++, slice 2 ~500 / 200, slice 3 ~1,200 /
 300, slice 4 ~900 / 250, slice 5 ~1,600 / 400, slice 6 ~800 / −2,000. Total
 ≈ 5.6k Rust replacing ≈ 4.2k C++.
 
+### 4.1 Where the tree stands
+
+Every routine that decides a collision, a force or a frame of ball motion is
+now in `rust/geometry`; the C++ keeps the object graph and the dispatch into it.
+Concretely, ported and covered by a differential test:
+
+* slice 1 — boxes and their edge and field lists, segment/circle/rectangle box
+  filling, the ray and segment walks, line and circle distances, the contact
+  point, the collision-group mask, and the field walk with its summation;
+* slice 2 — the frame's advance (field force, heading, speed clamp, substep
+  count), the substep loop, the stuck-ball check, the ball-pair response, the
+  launch jitter and the sixteen-slot hit window;
+* slice 4 — the flipper's control points, stepping, angle delta, distance and
+  the front/back collision response;
+* every component response and field force (`default_collision`,
+  `basic_collision`, table/ramp/kickout/hole fields), the wall builder, and the
+  projection.
+
+What remains is structural rather than arithmetic: the component registry and
+event queue (slice 3), the per-component state machines (slice 5) and the loader
+that emits a `World` directly (slice 6). Those move objects and dispatch rather
+than formulas, so they need the slice-3 event queue and a recorded trace before
+they can be diffed the way the arithmetic was — the stop rule below is what keeps
+the ported formulas from being re-opened while they land.
+
 **Ordering rationale.** Slices 1–2 remove most pointer traffic (every wall edge
 and every ball) while leaving behaviour in C++ behind a pure callback, so the
 riskiest thing — flipper physics — moves only after the harness has proven

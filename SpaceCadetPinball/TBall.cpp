@@ -96,30 +96,40 @@ void TBall::Repaint()
 
 void TBall::not_again(TEdgeSegment* edge)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// The window and its sliding rule are the Rust ball's; what crosses is the
+	// edge identity, which is also what the world's cast filters on.
+	scp_ball_not_again(Collisions, &EdgeCollisionCount, reinterpret_cast<uint64_t>(edge));
+#else
 	if (EdgeCollisionCount < 16)
 	{
-		Collisions[EdgeCollisionCount] = edge;
+		Collisions[EdgeCollisionCount] = reinterpret_cast<uint64_t>(edge);
 		++EdgeCollisionCount;
 	}
 	else
 	{
 		for (int i = 0; i < 8; i++)
 			Collisions[i] = Collisions[i + 8];
-		Collisions[8] = edge;
+		Collisions[8] = reinterpret_cast<uint64_t>(edge);
 		EdgeCollisionCount = 9;
 	}
+#endif
 	EdgeCollisionResetFlag = true;
 }
 
 bool TBall::already_hit(const TEdgeSegment& edge) const
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	return scp_ball_already_hit(Collisions, EdgeCollisionCount, reinterpret_cast<uint64_t>(&edge)) != 0;
+#else
 	for (int i = 0; i < EdgeCollisionCount; i++)
 	{
-		if (Collisions[i] == &edge)
+		if (Collisions[i] == reinterpret_cast<uint64_t>(&edge))
 			return true;
 	}
 
 	return false;
+#endif
 }
 
 int TBall::Message(MessageCode code, float value)

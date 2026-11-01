@@ -295,9 +295,88 @@ pub unsafe extern "C" fn scp_geometry_nearest_ball(
     winner
 }
 
+/// How many edges a ball remembers during one substep sweep: `TBall::Collisions`.
+pub const HIT_WINDOW: usize = 16;
+
+/// `TBall::not_again`: record that the ball was told about `edge`.
+///
+/// The window fills front to back. Once it is full the eight oldest entries are
+/// dropped, the eight newest slide down, and the new edge lands at slot eight, so
+/// a full window keeps sliding over the sweep instead of stalling on whatever it
+/// held first. Slots past `count` are stale and never read.
+pub fn not_again(window: &mut [u64; HIT_WINDOW], count: &mut i32, edge: u64) {
+    let used = (*count).clamp(0, HIT_WINDOW as i32) as usize;
+    if used < HIT_WINDOW {
+        window[used] = edge;
+        *count = used as i32 + 1;
+    } else {
+        window.copy_within(8..HIT_WINDOW, 0);
+        window[8] = edge;
+        *count = 9;
+    }
+}
+
+/// `TBall::already_hit`: whether the ball already knows about `edge` during this
+/// sweep, which is what keeps it from being answered twice by one edge.
+pub fn already_hit(window: &[u64; HIT_WINDOW], count: i32, edge: u64) -> bool {
+    let used = count.clamp(0, HIT_WINDOW as i32) as usize;
+    window[..used].contains(&edge)
+}
+
+/// C entry point for [`not_again`]: the window and its count are the ball's.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_ball_not_again(window: *mut u64, count: *mut i32, edge: u64) {
+    if window.is_null() || count.is_null() {
+        return;
+    }
+    // SAFETY: the C++ ball passes its own fixed-size array and live counter.
+    let window = unsafe { &mut *(window as *mut [u64; HIT_WINDOW]) };
+    not_again(window, unsafe { &mut *count }, edge);
+}
+
+/// C entry point for [`already_hit`]: non-zero when the edge is in the window.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_ball_already_hit(window: *const u64, count: i32, edge: u64) -> i32 {
+    if window.is_null() {
+        return 0;
+    }
+    // SAFETY: the C++ ball passes its own fixed-size array.
+    let window = unsafe { &*(window as *const [u64; HIT_WINDOW]) };
+    already_hit(window, count, edge) as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_hit_window_fills_and_then_slides() {
+        let mut window = [0u64; HIT_WINDOW];
+        let mut count = 0;
+        for edge in 1..=HIT_WINDOW as u64 {
+            not_again(&mut window, &mut count, edge);
+        }
+        assert_eq!(count, 16);
+        assert!(already_hit(&window, count, 1));
+        assert!(already_hit(&window, count, 16));
+
+        // The seventeenth edge drops the eight oldest and keeps the eight newest.
+        not_again(&mut window, &mut count, 17);
+        assert_eq!(count, 9);
+        assert!(!already_hit(&window, count, 8));
+        assert_eq!(&window[..9], &[9, 10, 11, 12, 13, 14, 15, 16, 17]);
+    }
+
+    #[test]
+    fn an_edge_outside_the_count_is_not_a_hit() {
+        let mut window = [0u64; HIT_WINDOW];
+        let mut count = 0;
+        not_again(&mut window, &mut count, 42);
+        not_again(&mut window, &mut count, 43);
+        assert!(already_hit(&window, count, 42));
+        assert!(!already_hit(&window, count, 0));
+        assert!(!already_hit(&window, 0, 42));
+    }
 
     fn ray(x: f32, y: f32, dx: f32, dy: f32, max: f32) -> Ray {
         Ray {

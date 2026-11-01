@@ -337,7 +337,8 @@ float TEdgeManager::CastWorld(ray_type* ray, TBall* ball, TEdgeSegment** edge)
 	size_t hitCount = 0;
 	for (auto index = 0; ball && index < ball->EdgeCollisionCount && hitCount < 16; ++index)
 	{
-		auto found = WorldEdges.find(ball->Collisions[index]);
+		auto edge = reinterpret_cast<TEdgeSegment*>(ball->Collisions[index]);
+		auto found = WorldEdges.find(edge);
 		if (found != WorldEdges.end() && found->second.Registered)
 		{
 			hits[hitCount++] = found->second.Id;

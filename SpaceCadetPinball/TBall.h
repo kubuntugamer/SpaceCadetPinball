@@ -27,7 +27,10 @@ public :
 	vector2 RampFieldForce{};
 	TCollisionComponent* CollisionComp;
 	int CollisionMask;
-	TEdgeSegment* Collisions[16]{};
+	// Edge identities, not pointers: the window crosses to the Rust routines as
+	// plain numbers, and the id scheme is the world's (Doc/rust-object-ownership.md
+	// §3.1). The C++ edges are still objects here, so the address is the id.
+	uint64_t Collisions[16]{};
 	int EdgeCollisionCount;
 	bool EdgeCollisionResetFlag{};
 	vector3 CollisionOffset{};
