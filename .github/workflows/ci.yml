@@ -55,6 +55,9 @@ jobs:
       - name: Compare the Rust flipper setup against the C++ reference
         run: ./bin/flippersetup_parity
 
+      - name: Compare the Rust flipper motion against the C++ reference
+        run: ./bin/flippermotion_parity
+
       - name: Compare the Rust circle box-filling against the C++ reference
         run: ./bin/circlegrid_parity
 

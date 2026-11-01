@@ -189,6 +189,28 @@ void TFlipper::FlipperCollision(float deltaAngle)
 		}
 	}
 
+#ifdef SCP_USE_RUST_GEOMETRY
+	// A flipper that hit a ball gives ground instead of advancing, and a swing
+	// with nothing left to travel snaps to its destination and stops. Both rules
+	// live in the crate so the flipper's motion has one implementation.
+	RustFlipperSweep sweep{};
+	sweep.CurrentAngle = FlipperEdge->CurrentAngle;
+	sweep.AngleDst = FlipperEdge->AngleDst;
+	sweep.AngleRemainder = FlipperEdge->AngleRemainder;
+	sweep.MoveSpeed = FlipperEdge->MoveSpeed;
+	sweep.DeltaAngle = deltaAngle;
+	sweep.MessageField = MessageField;
+	sweep.Hit = collisionFlag ? 1 : 0;
+
+	scp_flipper_sweep(&sweep);
+
+	FlipperEdge->CurrentAngle = sweep.CurrentAngleOut;
+	FlipperEdge->AngleRemainder = sweep.AngleRemainderOut;
+	MessageField = sweep.MessageFieldOut;
+	if (sweep.FlipperNull)
+		FlipperEdge->FlipperFlag = MessageCode::TFlipperNull;
+	FlipperEdge->ControlPointDirtyFlag = sweep.ControlPointDirty != 0;
+#else
 	if (collisionFlag)
 	{
 		auto angleAdvance = deltaAngle / (std::fabs(FlipperEdge->MoveSpeed) * 5.0f);
@@ -208,4 +230,5 @@ void TFlipper::FlipperCollision(float deltaAngle)
 		MessageField = 0;
 	}
 	FlipperEdge->ControlPointDirtyFlag = true;
+#endif
 }

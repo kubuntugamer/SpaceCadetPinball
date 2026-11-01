@@ -248,6 +248,46 @@ struct RustFlipperSetup
 	float InvT1Radius;
 };
 
+// Everything `TFlipperEdge::SetMotion` decides. The three state fields are in/out
+// because a code the switch does not name leaves them as they were.
+struct RustFlipperMotion
+{
+	// In: where the flipper is, its stops and its two speeds.
+	float CurrentAngle;
+	float AngleMax;
+	float ExtendSpeed;
+	float RetractSpeed;
+	// In: the `MessageCode` discriminant.
+	int32_t Code;
+	// In/out: travel left, destination and current speed.
+	float AngleRemainder;
+	float AngleDst;
+	float MoveSpeed;
+	// Out: the flag to store.
+	int32_t FlipperFlag;
+};
+
+// Everything `TFlipper::FlipperCollision` does after its ball loop: the motion
+// bookkeeping for one substep, including the snap home when a swing arrives.
+struct RustFlipperSweep
+{
+	// In: the motion state and the substep's angle.
+	float CurrentAngle;
+	float AngleDst;
+	float AngleRemainder;
+	float MoveSpeed;
+	float DeltaAngle;
+	// In: whether it is still swinging, and whether a ball was resolved.
+	int32_t MessageField;
+	int32_t Hit;
+	// Out: the state to store back, plus the two flags it raises.
+	float CurrentAngleOut;
+	float AngleRemainderOut;
+	int32_t MessageFieldOut;
+	int32_t FlipperNull;
+	int32_t ControlPointDirty;
+};
+
 // Everything `TBall::EdgeCollision` computes when two balls meet: both ball
 // states in/out and the distance the moving ball travels to the contact. The
 // disable flag on the ball that was hit stays on the C++ side with the rest of
@@ -326,6 +366,12 @@ extern "C"
 
 	// Derive a flipper's collision shape from its table data.
 	void scp_flipper_setup(RustFlipperSetup* state);
+
+	// Put a flipper in motion for one message, or stop a finished swing.
+	void scp_flipper_set_motion(RustFlipperMotion* state);
+
+	// Apply one substep's flipper motion bookkeeping.
+	void scp_flipper_sweep(RustFlipperSweep* state);
 
 	// The circle's contact point and collision direction for one approach.
 	void scp_circle_contact(RustCircleContact* state);

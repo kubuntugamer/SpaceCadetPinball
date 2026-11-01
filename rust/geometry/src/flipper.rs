@@ -15,6 +15,8 @@ use crate::{
 
 /// `MessageCode::TFlipperNull`: the flipper is at rest and behaves like a wall.
 const FLIPPER_NULL: i32 = 0;
+/// `MessageCode::TFlipperExtend`: the flipper is swinging out to its stop.
+const FLIPPER_EXTEND: i32 = 1;
 /// `MessageCode::TFlipperRetract`: the flipper is swinging back to rest, which
 /// flips which side of the collision line counts as the front.
 const FLIPPER_RETRACT: i32 = 2;
@@ -258,6 +260,146 @@ pub unsafe extern "C" fn scp_flipper_setup(state: *mut FlipperSetup) {
     }
     // SAFETY: the C++ constructor passes a valid, writable struct.
     unsafe { (*state).derive() };
+}
+
+/// `MessageCode::Reset`, the one public code the flipper's motion reads.
+const MSG_RESET: i32 = 1024;
+
+/// Everything `TFlipperEdge::SetMotion` decides: the state a flipper message
+/// puts the motion into, in one `#[repr(C)]` struct.
+///
+/// The three state fields are in/out because a code the switch does not name
+/// leaves them alone, exactly as the original does. A swing with no travel left
+/// collapses to the null code, which is what stops the frame loop considering
+/// the flipper in motion at all.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FlipperMotion {
+    // In: where the flipper is now, and the two speeds it moves at.
+    pub current_angle: f32,
+    pub angle_max: f32,
+    pub extend_speed: f32,
+    pub retract_speed: f32,
+    /// In: the `MessageCode` discriminant the message carried.
+    pub code: i32,
+    // In/out: the motion state the code moves.
+    pub angle_remainder: f32,
+    pub angle_dst: f32,
+    pub move_speed: f32,
+    /// Out: the flag to store (the code just handled, or the null code).
+    pub flipper_flag: i32,
+}
+
+impl FlipperMotion {
+    /// Put the flipper in motion for `code`, or stop it when a swing is asked for
+    /// with no travel left.
+    pub fn set_motion(&mut self) {
+        let mut code = self.code;
+        if code == FLIPPER_EXTEND {
+            self.angle_remainder = (self.angle_max - self.current_angle).abs();
+            self.angle_dst = self.angle_max;
+            self.move_speed = self.extend_speed;
+        } else if code == FLIPPER_RETRACT {
+            self.angle_remainder = self.current_angle.abs();
+            self.angle_dst = 0.0;
+            self.move_speed = self.retract_speed;
+        } else if code == MSG_RESET {
+            self.angle_remainder = 0.0;
+            self.angle_dst = 0.0;
+        }
+
+        if self.angle_remainder == 0.0 {
+            code = FLIPPER_NULL;
+        }
+
+        self.flipper_flag = code;
+    }
+}
+
+/// C entry point for [`FlipperMotion::set_motion`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_flipper_set_motion(state: *mut FlipperMotion) {
+    if state.is_null() {
+        return;
+    }
+    // SAFETY: the C++ wrapper passes a valid, writable struct.
+    unsafe { (*state).set_motion() };
+}
+
+/// Everything `TFlipper::FlipperCollision` does after its ball loop: how far the
+/// flipper advances this substep, and how a swing that has nothing left to travel
+/// snaps home.
+///
+/// A flipper that hit a ball gives ground instead of advancing — it retreats by
+/// the last five-hundredths of the step, scaled by how fast it was moving — and
+/// records that as travel left, so a ball parked against the bat keeps pushing it
+/// back rather than being squeezed through it. A swing that has arrived snaps to
+/// its destination angle and stops, which is the state `SetMotion` reads next.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FlipperSweep {
+    // In: the motion state before this substep.
+    pub current_angle: f32,
+    pub angle_dst: f32,
+    pub angle_remainder: f32,
+    pub move_speed: f32,
+    /// In: the angle this substep asked for, and whether it is still swinging.
+    pub delta_angle: f32,
+    pub message_field: i32,
+    /// In: non-zero when the loop above resolved a collision this substep.
+    pub hit: i32,
+    // Out: the state to store back.
+    pub current_angle_out: f32,
+    pub angle_remainder_out: f32,
+    pub message_field_out: i32,
+    /// Out: non-zero to set the flipper's flag to the null code.
+    pub flipper_null: i32,
+    /// Out: non-zero to rebuild the control points before the next query.
+    pub control_point_dirty: i32,
+}
+
+impl FlipperSweep {
+    /// Apply one substep's worth of motion bookkeeping.
+    pub fn sweep(&mut self) {
+        self.current_angle_out = self.current_angle;
+        self.angle_remainder_out = self.angle_remainder;
+        self.message_field_out = self.message_field;
+        self.flipper_null = 0;
+        self.control_point_dirty = 0;
+
+        // An idle flipper is not moving, so nothing here applies. The engine
+        // returns before its ball loop on the same condition.
+        if self.message_field == 0 {
+            return;
+        }
+
+        if self.hit != 0 {
+            let angle_advance = self.delta_angle / (self.move_speed.abs() * 5.0);
+            self.current_angle_out -= angle_advance;
+            self.angle_remainder_out += angle_advance.abs();
+        } else {
+            self.current_angle_out += self.delta_angle;
+            self.angle_remainder_out -= self.delta_angle.abs();
+        }
+
+        if self.angle_remainder_out <= 0.0001 {
+            self.current_angle_out = self.angle_dst;
+            self.flipper_null = 1;
+            self.message_field_out = 0;
+        }
+
+        self.control_point_dirty = 1;
+    }
+}
+
+/// C entry point for [`FlipperSweep::sweep`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_flipper_sweep(state: *mut FlipperSweep) {
+    if state.is_null() {
+        return;
+    }
+    // SAFETY: the C++ wrapper passes a valid, writable struct.
+    unsafe { (*state).sweep() };
 }
 
 /// Everything `TFlipperEdge::EdgeCollision` reads and writes, in one

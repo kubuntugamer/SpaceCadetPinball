@@ -365,6 +365,27 @@ float TFlipperEdge::flipper_angle_delta(float timeDelta)
 
 int TFlipperEdge::SetMotion(MessageCode code)
 {
+#ifdef SCP_USE_RUST_GEOMETRY
+	// Which motion state a message puts the flipper in, and whether a swing with
+	// no travel left collapses to the null code, is the crate's decision.
+	RustFlipperMotion motion{};
+	motion.CurrentAngle = CurrentAngle;
+	motion.AngleMax = AngleMax;
+	motion.ExtendSpeed = ExtendSpeed;
+	motion.RetractSpeed = RetractSpeed;
+	motion.Code = static_cast<int32_t>(code);
+	motion.AngleRemainder = AngleRemainder;
+	motion.AngleDst = AngleDst;
+	motion.MoveSpeed = MoveSpeed;
+
+	scp_flipper_set_motion(&motion);
+
+	AngleRemainder = motion.AngleRemainder;
+	AngleDst = motion.AngleDst;
+	MoveSpeed = motion.MoveSpeed;
+	FlipperFlag = static_cast<MessageCode>(motion.FlipperFlag);
+	return motion.FlipperFlag;
+#else
 	switch (code)
 	{
 	case MessageCode::TFlipperExtend:
@@ -389,4 +410,5 @@ int TFlipperEdge::SetMotion(MessageCode code)
 
 	FlipperFlag = code;
 	return static_cast<int>(code);
+#endif
 }
