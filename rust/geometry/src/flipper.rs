@@ -9,8 +9,8 @@
 //! turns in one frame and how many substeps that turn spans.
 
 use crate::{
-    basic_collision, cross2, dot, scp_geometry_line_init, scp_geometry_rotate_point, sqrt_f32,
-    BallState, Circle, Line, Vector2, NO_INTERSECTION,
+    basic_collision, cross2, dot, normalize, scp_geometry_line_init, scp_geometry_rotate_point,
+    sqrt_f32, BallState, Circle, Line, Vector2, Vector3, NO_INTERSECTION,
 };
 
 /// `MessageCode::TFlipperNull`: the flipper is at rest and behaves like a wall.
@@ -90,6 +90,174 @@ impl FlipperPoints {
             radius_sq: self.circle_t1_radius_sq,
         };
     }
+}
+
+/// Everything the `TFlipperEdge` constructor derives from the table data, in one
+/// `#[repr(C)]` struct so the engine hands the flipper's fields over without a
+/// pointer per member.
+///
+/// The shape a flipper turns from is fixed at load time: two radii from the pivot
+/// and tip heights plus the table's component offset, the travel angle between
+/// the two tip directions, the four source points bounding the swept face, and
+/// the three scalars the distance query and the response divide by. The two
+/// speeds are the only inputs the travel angle feeds back into, because 3DPB
+/// stores a duration where Full Tilt stores radians per second.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FlipperSetup {
+    // In: the pivot and the two tip positions, in the table's frame.
+    pub origin: Vector3,
+    pub t1: Vector3,
+    pub t2: Vector3,
+    /// In: `TPinballTable::CollisionCompOffset`, which is the ball's radius.
+    pub comp_offset: f32,
+    /// In/out: the speeds as the table data gives them, converted in place when
+    /// the data is a duration rather than a rate.
+    pub extend_speed: f32,
+    pub retract_speed: f32,
+    /// In: non-zero for Full Tilt, whose speeds are already radians per second.
+    pub full_tilt: i32,
+    // Out: the geometry the stepping and the distance query read.
+    pub t2_src: Vector2,
+    pub rot_origin: Vector2,
+    pub circlebase_radius: f32,
+    pub circlebase_radius_msq: f32,
+    pub circlebase_radius_sq: f32,
+    pub circle_t1_radius: f32,
+    pub circle_t1_radius_msq: f32,
+    pub circle_t1_radius_sq: f32,
+    pub vec_origin_t1: Vector2,
+    pub vec_origin_t2: Vector2,
+    pub angle_max: f32,
+    pub a1_src: Vector2,
+    pub a2_src: Vector2,
+    pub b1_src: Vector2,
+    pub b2_src: Vector2,
+    pub distance_div: f32,
+    pub distance_div_sq: f32,
+    pub inv_t1_radius: f32,
+}
+
+impl FlipperSetup {
+    /// Derive the flipper's collision shape from the table data. Mirrors the
+    /// body of the `TFlipperEdge` constructor.
+    pub fn derive(&mut self) {
+        let origin = self.origin;
+        let t1 = self.t1;
+        let t2 = self.t2;
+
+        self.t2_src = Vector2 {
+            x: t2.x,
+            y: t2.y,
+        };
+        self.rot_origin = Vector2 {
+            x: origin.x,
+            y: origin.y,
+        };
+
+        // The radii are circles of 1.01 times the nominal size, squared straight
+        // from the product so the widening is not rounded twice.
+        self.circlebase_radius = origin.z + self.comp_offset;
+        self.circlebase_radius_msq =
+            self.circlebase_radius * 1.01 * (self.circlebase_radius * 1.01);
+        self.circlebase_radius_sq = self.circlebase_radius * self.circlebase_radius;
+
+        self.circle_t1_radius = t1.z + self.comp_offset;
+        self.circle_t1_radius_msq = self.circle_t1_radius * 1.01 * (self.circle_t1_radius * 1.01);
+        self.circle_t1_radius_sq = self.circle_t1_radius * self.circle_t1_radius;
+
+        let mut vec_origin_t1 = Vector2 {
+            x: t1.x - origin.x,
+            y: t1.y - origin.y,
+        };
+        let mut vec_origin_t2 = Vector2 {
+            x: t2.x - origin.x,
+            y: t2.y - origin.y,
+        };
+        normalize(&mut vec_origin_t1);
+        normalize(&mut vec_origin_t2);
+        self.vec_origin_t1 = vec_origin_t1;
+        self.vec_origin_t2 = vec_origin_t2;
+
+        // Which way the flipper sweeps comes from the cross product rather than
+        // the angle itself: the same two directions, read for their handedness.
+        let mut angle_max = dot(vec_origin_t1, vec_origin_t2).acos();
+        if cross2(vec_origin_t1, vec_origin_t2) < 0.0 {
+            angle_max = -angle_max;
+        }
+        self.angle_max = angle_max;
+
+        // 3DPB and FT have different formats for flipper speed:
+        // 3DPB: Time it takes for flipper to go from source to destination, in sec.
+        // FT: Flipper movement speed, in radians per sec.
+        if self.full_tilt == 0 {
+            let span = angle_max.abs();
+            self.retract_speed = span / self.retract_speed;
+            self.extend_speed = span / self.extend_speed;
+        }
+
+        // The swept face's bounding points, offset from the pivot and the tip by
+        // the perpendicular of the tip direction; the sign of the travel angle
+        // decides which of the two pairs is the leading edge.
+        let perp_a = Vector2 {
+            x: -vec_origin_t1.y,
+            y: vec_origin_t1.x,
+        };
+        let mut a2_src = Vector2 {
+            x: perp_a.x * self.circlebase_radius + origin.x,
+            y: perp_a.y * self.circlebase_radius + origin.y,
+        };
+        let mut a1_src = Vector2 {
+            x: perp_a.x * self.circle_t1_radius + t1.x,
+            y: perp_a.y * self.circle_t1_radius + t1.y,
+        };
+
+        let perp_b = Vector2 {
+            x: vec_origin_t1.y,
+            y: -vec_origin_t1.x,
+        };
+        let mut b1_src = Vector2 {
+            x: perp_b.x * self.circlebase_radius + origin.x,
+            y: perp_b.y * self.circlebase_radius + origin.y,
+        };
+        let mut b2_src = Vector2 {
+            x: perp_b.x * self.circle_t1_radius + t1.x,
+            y: perp_b.y * self.circle_t1_radius + t1.y,
+        };
+
+        if angle_max < 0.0 {
+            core::mem::swap(&mut a1_src, &mut b1_src);
+            core::mem::swap(&mut a2_src, &mut b2_src);
+        }
+        self.a1_src = a1_src;
+        self.a2_src = a2_src;
+        self.b1_src = b1_src;
+        self.b2_src = b2_src;
+
+        let dx = t1.x - self.rot_origin.x;
+        let dy = t1.y - self.rot_origin.y;
+        let distance = sqrt_f32(dy * dy + dx * dx) + self.comp_offset + t1.z;
+        self.distance_div = distance;
+        self.distance_div_sq = distance * distance;
+        self.inv_t1_radius = 1.0 / self.circle_t1_radius * 1.5;
+
+        // A flipper that sweeps the other way turns the speeds around with it.
+        if angle_max <= 0.0 {
+            self.extend_speed = -self.extend_speed;
+        } else {
+            self.retract_speed = -self.retract_speed;
+        }
+    }
+}
+
+/// C entry point for [`FlipperSetup::derive`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_flipper_setup(state: *mut FlipperSetup) {
+    if state.is_null() {
+        return;
+    }
+    // SAFETY: the C++ constructor passes a valid, writable struct.
+    unsafe { (*state).derive() };
 }
 
 /// Everything `TFlipperEdge::EdgeCollision` reads and writes, in one

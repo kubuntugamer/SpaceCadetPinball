@@ -344,8 +344,8 @@ Concretely, ported and covered by a differential test:
 * slice 2 — the frame's advance (field force, heading, speed clamp, substep
   count), the substep loop, the stuck-ball check, the ball-pair response, the
   launch jitter and the sixteen-slot hit window;
-* slice 4 — the flipper's control points, stepping, angle delta, distance and
-  the front/back collision response;
+* slice 4 — the flipper's setup derivation, control points, stepping, angle
+  delta, distance and the front/back collision response;
 * every component response and field force (`default_collision`,
   `basic_collision`, table/ramp/kickout/hole fields), the wall builder, and the
   projection.

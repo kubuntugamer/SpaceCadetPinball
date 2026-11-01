@@ -20,13 +20,48 @@ TFlipperEdge::TFlipperEdge(TCollisionComponent* collComp, char* activeFlag, unsi
                            float collMult, float elasticity, float smoothness): TEdgeSegment(
 	collComp, activeFlag, collisionGroup)
 {
-	vector3 crossProd{}, vecOriginT1{}, vecOriginT2{};
-
 	Elasticity = elasticity;
 	Smoothness = smoothness;
 	CollisionMult = collMult;
 
 	T1Src = static_cast<vector2>(*vecT1);
+
+#ifdef SCP_USE_RUST_GEOMETRY
+	// The shape, the travel angle and the two speeds come out of Rust in one
+	// struct: this is a fixed derivation from the table data, so it moves with
+	// the rest of the flipper arithmetic instead of being the last formula here.
+	RustFlipperSetup setup{};
+	setup.Origin = {origin->X, origin->Y, origin->Z};
+	setup.T1 = {vecT1->X, vecT1->Y, vecT1->Z};
+	setup.T2 = {vecT2->X, vecT2->Y, vecT2->Z};
+	setup.CompOffset = table->CollisionCompOffset;
+	setup.ExtendSpeed = extendSpeed;
+	setup.RetractSpeed = retractSpeed;
+	setup.FullTilt = pb::FullTiltMode ? 1 : 0;
+
+	scp_flipper_setup(&setup);
+
+	T2Src = {setup.T2Src.X, setup.T2Src.Y};
+	RotOrigin = {setup.RotOrigin.X, setup.RotOrigin.Y};
+	CirclebaseRadius = setup.CirclebaseRadius;
+	CirclebaseRadiusMSq = setup.CirclebaseRadiusMSq;
+	CirclebaseRadiusSq = setup.CirclebaseRadiusSq;
+	CircleT1Radius = setup.CircleT1Radius;
+	CircleT1RadiusMSq = setup.CircleT1RadiusMSq;
+	CircleT1RadiusSq = setup.CircleT1RadiusSq;
+	AngleMax = setup.AngleMax;
+	A1Src = {setup.A1Src.X, setup.A1Src.Y};
+	A2Src = {setup.A2Src.X, setup.A2Src.Y};
+	B1Src = {setup.B1Src.X, setup.B1Src.Y};
+	B2Src = {setup.B2Src.X, setup.B2Src.Y};
+	DistanceDiv = setup.DistanceDiv;
+	DistanceDivSq = setup.DistanceDivSq;
+	InvT1Radius = setup.InvT1Radius;
+	ExtendSpeed = setup.ExtendSpeed;
+	RetractSpeed = setup.RetractSpeed;
+#else
+	vector3 crossProd{}, vecOriginT1{}, vecOriginT2{};
+
 	T2Src = static_cast<vector2>(*vecT2);
 	RotOrigin.X = origin->X;
 	RotOrigin.Y = origin->Y;
@@ -53,9 +88,6 @@ TFlipperEdge::TFlipperEdge(TCollisionComponent* collComp, char* activeFlag, unsi
 	maths::cross(vecOriginT1, vecOriginT2, crossProd);
 	if (crossProd.Z < 0.0f)
 		AngleMax = -AngleMax;
-
-	FlipperFlag = MessageCode::TFlipperNull;
-	AngleDst = 0.0;
 
 	// 3DPB and FT have different formats for flipper speed:
 	// 3DPB: Time it takes for flipper to go from source to destination, in sec.
@@ -102,6 +134,11 @@ TFlipperEdge::TFlipperEdge(TCollisionComponent* collComp, char* activeFlag, unsi
 	{
 		RetractSpeed = -RetractSpeed;
 	}
+#endif
+
+	FlipperFlag = MessageCode::TFlipperNull;
+	AngleDst = 0.0;
+
 	set_control_points(CurrentAngle);
 }
 

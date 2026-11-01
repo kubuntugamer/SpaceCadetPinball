@@ -209,6 +209,45 @@ struct RustThrowBall
 	float Speed;
 };
 
+// Everything the `TFlipperEdge` constructor derives from the table data: the
+// pivot and both tip positions in, the radii, travel angle, source points and
+// the scalars the distance query divides by back out. The two speeds are in/out
+// because 3DPB stores a duration and Full Tilt a rate, and the travel angle feeds
+// the conversion.
+struct RustFlipperSetup
+{
+	// In: the pivot and the two tip positions.
+	RustVector3 Origin;
+	RustVector3 T1;
+	RustVector3 T2;
+	// In: the table's component offset (the ball radius).
+	float CompOffset;
+	// In/out: the speeds as the table data gives them, converted in place.
+	float ExtendSpeed;
+	float RetractSpeed;
+	// In: non-zero for Full Tilt mode.
+	int32_t FullTilt;
+	// Out: the geometry the stepping and the distance query read.
+	RustVector2 T2Src;
+	RustVector2 RotOrigin;
+	float CirclebaseRadius;
+	float CirclebaseRadiusMSq;
+	float CirclebaseRadiusSq;
+	float CircleT1Radius;
+	float CircleT1RadiusMSq;
+	float CircleT1RadiusSq;
+	RustVector2 VecOriginT1;
+	RustVector2 VecOriginT2;
+	float AngleMax;
+	RustVector2 A1Src;
+	RustVector2 A2Src;
+	RustVector2 B1Src;
+	RustVector2 B2Src;
+	float DistanceDiv;
+	float DistanceDivSq;
+	float InvT1Radius;
+};
+
 // Everything `TBall::EdgeCollision` computes when two balls meet: both ball
 // states in/out and the distance the moving ball travels to the contact. The
 // disable flag on the ball that was hit stays on the C++ side with the rest of
@@ -284,6 +323,9 @@ extern "C"
 
 	// The ball-versus-ball response, writing both balls back.
 	void scp_ball_edge_collision(RustBallPairCollision* state);
+
+	// Derive a flipper's collision shape from its table data.
+	void scp_flipper_setup(RustFlipperSetup* state);
 
 	// The circle's contact point and collision direction for one approach.
 	void scp_circle_contact(RustCircleContact* state);
