@@ -178,6 +178,90 @@ pub unsafe extern "C" fn scp_ball_edge_collision(state: *mut BallPairCollision) 
     ball_edge_collision(unsafe { &mut *state });
 }
 
+/// `pb::timed_frame`'s stuck-ball check: the decision the frame loop makes
+/// about one ball before the substeps run.
+///
+/// A ball that is active-ish (or moving fast) merely refreshes its last-active
+/// stamp and, if it was flagged stuck, clears the flag once it has travelled
+/// more than twice its radius since the previous frame. A ball that has been
+/// idle for over 500 ticks steps its stuck counter -- cleared when it moved at
+/// least half a radius, incremented otherwise -- records its position as the
+/// new reference frame, and asks the host to run the unstuck handler with the
+/// idle time, which is where the throw-or-disable decision lives. The counter
+/// crosses the boundary because `control::UnstuckBall` reads it after the
+/// store, so the host applies every value before firing the handler.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StuckCheck {
+    /// In: the ball's current and previous-frame positions.
+    pub position: Vector2,
+    pub prev_position: Vector2,
+    /// In: the ball's radius, speed and the three flags the branch reads.
+    pub radius: f32,
+    pub speed: f32,
+    pub active: i32,
+    pub has_group: i32,
+    pub has_collision_comp: i32,
+    /// In: the ball's stuck counter and last-active stamp, and the host's tick.
+    pub stuck_counter: i32,
+    pub last_active_time: i32,
+    pub now: i32,
+    /// Out: the counter and stamp to store (equal to the inputs when the
+    /// branch does not change them).
+    pub counter: i32,
+    pub last_active: i32,
+    /// Out: non-zero to copy the current position over the previous one.
+    pub set_prev: i32,
+    /// Out: non-zero to call the host's unstuck handler, with `unstuck_dt`
+    /// ticks of idleness behind it.
+    pub unstuck: i32,
+    pub unstuck_dt: i32,
+}
+
+/// Decide the stuck-ball bookkeeping for one frame; every field the branch
+/// changes comes back through the struct.
+pub fn stuck_check(state: &mut StuckCheck) {
+    state.counter = state.stuck_counter;
+    state.last_active = state.last_active_time;
+    state.set_prev = 0;
+    state.unstuck = 0;
+    state.unstuck_dt = 0;
+
+    if state.active == 0 || state.has_group != 0 || state.has_collision_comp != 0 || state.speed >= 0.8 {
+        if state.counter > 0 {
+            let dx = state.position.x - state.prev_position.x;
+            let dy = state.position.y - state.prev_position.y;
+            let radius_x2 = state.radius * 2.0;
+            if radius_x2 * radius_x2 < dx * dx + dy * dy {
+                state.counter = 0;
+            }
+        }
+        state.last_active = state.now;
+        return;
+    }
+
+    if state.now - state.last_active_time > 500 {
+        let dx = state.position.x - state.prev_position.x;
+        let dy = state.position.y - state.prev_position.y;
+        let radius_d2 = state.radius / 2.0;
+        state.set_prev = 1;
+        if radius_d2 * radius_d2 < dx * dx + dy * dy {
+            state.counter = 0;
+        } else {
+            state.counter += 1;
+        }
+        state.unstuck = 1;
+        state.unstuck_dt = state.now - state.last_active_time;
+    }
+}
+
+/// C entry point for [`stuck_check`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_ball_stuck_check(state: *mut StuckCheck) {
+    // SAFETY: the C++ wrapper passes a valid, writable state struct.
+    stuck_check(unsafe { &mut *state });
+}
+
 /// C entry point for [`throw_ball`]: heading in/out, speed out.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn scp_ball_throw(state: *mut ThrowState) {
@@ -433,6 +517,60 @@ mod tests {
         assert_eq!(state.second.speed, 1.0);
         assert_eq!(state.first.direction.x, 1.0);
         assert_eq!(state.first.speed, 2.0);
+    }
+
+    #[test]
+    fn the_stuck_check_refreshes_a_moving_ball_and_times_an_idle_one_out() {
+        // Active and moving: the stamp follows the tick, a stale stuck flag
+        // clears once the ball has travelled more than twice its radius.
+        let mut moving = StuckCheck {
+            position: Vector2 { x: 10.0, y: 0.0 },
+            prev_position: Vector2 { x: 0.0, y: 0.0 },
+            radius: 2.0,
+            speed: 1.5,
+            active: 1,
+            stuck_counter: 3,
+            last_active_time: 100,
+            now: 175,
+            ..Default::default()
+        };
+        stuck_check(&mut moving);
+        assert_eq!(moving.counter, 0);
+        assert_eq!(moving.last_active, 175);
+        assert_eq!(moving.unstuck, 0);
+
+        // Idle past the deadline: counter steps, position recorded, handler
+        // asked for with the idleness behind it.
+        let mut idle = StuckCheck {
+            position: Vector2 { x: 10.0, y: 0.0 },
+            prev_position: Vector2 { x: 10.0, y: 0.0 },
+            radius: 2.0,
+            speed: 0.0,
+            active: 1,
+            stuck_counter: 1,
+            last_active_time: 100,
+            now: 700,
+            ..Default::default()
+        };
+        stuck_check(&mut idle);
+        assert_eq!(idle.counter, 2);
+        assert_eq!(idle.set_prev, 1);
+        assert_eq!(idle.unstuck, 1);
+        assert_eq!(idle.unstuck_dt, 600);
+        assert_eq!(idle.last_active, 100);
+
+        // Under the deadline nothing moves at all.
+        let mut fresh = StuckCheck {
+            speed: 0.0,
+            active: 1,
+            last_active_time: 690,
+            now: 700,
+            ..Default::default()
+        };
+        stuck_check(&mut fresh);
+        assert_eq!(fresh.counter, fresh.stuck_counter);
+        assert_eq!(fresh.unstuck, 0);
+        assert_eq!(fresh.set_prev, 0);
     }
 
     #[test]

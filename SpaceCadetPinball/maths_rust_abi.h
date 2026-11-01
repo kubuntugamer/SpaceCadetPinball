@@ -238,11 +238,43 @@ struct RustCircleContact
 	RustVector2 Direction;
 };
 
+// Everything `pb::timed_frame`'s stuck-ball check reads and decides: the
+// ball's frame of reference and flags in, the counter, stamp, position copy
+// and unstuck request back out. The host applies the values before firing the
+// handler, because `control::UnstuckBall` reads the counter it follows.
+struct RustStuckCheck
+{
+	// In: the ball's current and previous-frame positions.
+	RustVector2 Position;
+	RustVector2 PrevPosition;
+	// In: radius, speed and the flags the branch reads.
+	float Radius;
+	float Speed;
+	int32_t Active;
+	int32_t HasGroup;
+	int32_t HasCollisionComp;
+	// In: the ball's stuck counter and last-active stamp, and the host's tick.
+	int32_t StuckCounter;
+	int32_t LastActiveTime;
+	int32_t Now;
+	// Out: the counter and stamp to store.
+	int32_t Counter;
+	int32_t LastActive;
+	// Out: non-zero to copy Position over PrevPosition; non-zero to call the
+	// unstuck handler with UnstuckDt ticks of idleness.
+	int32_t SetPrev;
+	int32_t Unstuck;
+	int32_t UnstuckDt;
+};
+
 extern "C"
 {
 	// Resolve one collision, writing the ball back through the struct; returns
 	// one of the SCP_COLLISION_* codes above.
 	int32_t scp_collision_resolve(RustCollisionResponse* state);
+
+	// Decide the stuck-ball bookkeeping for one frame.
+	void scp_ball_stuck_check(RustStuckCheck* state);
 
 	// The ball-versus-ball response, writing both balls back.
 	void scp_ball_edge_collision(RustBallPairCollision* state);

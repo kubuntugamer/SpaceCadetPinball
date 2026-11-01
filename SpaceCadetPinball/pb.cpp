@@ -441,6 +441,31 @@ void pb::timed_frame(float timeDelta)
 {
 	for (auto ball : MainTable->BallList)
 	{
+#ifdef SCP_USE_RUST_GEOMETRY
+		// The decision runs in rust/geometry; every value it changes comes
+		// back through the struct and is stored before the unstuck handler
+		// fires, because that handler reads the counter it follows.
+		RustStuckCheck check{};
+		check.Position = {ball->Position.X, ball->Position.Y};
+		check.PrevPosition = {ball->PrevPosition.X, ball->PrevPosition.Y};
+		check.Radius = ball->Radius;
+		check.Speed = ball->Speed;
+		check.Active = ball->ActiveFlag ? 1 : 0;
+		check.HasGroup = ball->HasGroupFlag ? 1 : 0;
+		check.HasCollisionComp = ball->CollisionComp ? 1 : 0;
+		check.StuckCounter = ball->StuckCounter;
+		check.LastActiveTime = ball->LastActiveTime;
+		check.Now = time_ticks;
+
+		scp_ball_stuck_check(&check);
+
+		ball->StuckCounter = check.Counter;
+		ball->LastActiveTime = check.LastActive;
+		if (check.SetPrev)
+			ball->PrevPosition = ball->Position;
+		if (check.Unstuck)
+			control::UnstuckBall(*ball, check.UnstuckDt);
+#else
 		if (!ball->ActiveFlag || ball->HasGroupFlag || ball->CollisionComp || ball->Speed >= 0.8f)
 		{
 			if (ball->StuckCounter > 0)
@@ -463,6 +488,7 @@ void pb::timed_frame(float timeDelta)
 				ball->StuckCounter++;
 			control::UnstuckBall(*ball, time_ticks - ball->LastActiveTime);
 		}
+#endif
 	}
 
 	int ballSteps[20]{};
