@@ -10,11 +10,14 @@
 //! * every input is a `Copy` struct or a scalar, and every output is written
 //!   into caller-provided memory.
 //!
-//! No function here calls back into the host. Sound, score and timer effects are
-//! meant to be queued and drained by the caller after a step, which is what lets
-//! the physics run without the re-entrant aliasing the C++ version has.
+//! No function here calls back into the host except through an explicitly
+//! installed probe: sound, score and timer effects are meant to be queued and
+//! drained by the caller after a step, which is what lets the physics run
+//! without the re-entrant aliasing the C++ version has. The two installed
+//! callbacks -- edge activeness and the field walk -- read host state the world
+//! cannot own and never call a `scp_world_*` function themselves.
 
-use crate::world::{ActiveProbe, Collider, CompId, EdgeId, Id, World};
+use crate::world::{ActiveProbe, Collider, CompId, EdgeId, FieldHost, Id, World};
 use crate::{Ray, Vector2};
 
 /// `ray_type` fields a query needs.
@@ -55,6 +58,18 @@ pub struct AbiHit {
     /// Packed edge id; see [`pack`].
     pub edge: u64,
     pub distance: f32,
+}
+
+/// The engine's dispatch for one field walk: the active probe for
+/// `field_effect_type` and the owning component's `FieldEffect`. Both are
+/// required; without them the walk answers nothing.
+#[repr(C)]
+pub struct AbiFieldHost {
+    pub userdata: *mut core::ffi::c_void,
+    pub is_active:
+        Option<unsafe extern "C" fn(*mut core::ffi::c_void, u64) -> i32>,
+    pub field_effect:
+        Option<unsafe extern "C" fn(*mut core::ffi::c_void, u64, *mut Vector2) -> i32>,
 }
 
 fn pack<T>(id: Id<T>) -> u64 {
@@ -137,6 +152,59 @@ pub unsafe extern "C" fn scp_world_set_active_probe(
     if let Some(world) = unsafe { world(handle) } {
         world.active_probe = probe.map(|probe| (probe, userdata));
     }
+}
+
+/// Files a field (`field_effect_type*` packed as the handle) into one box,
+/// mirroring `TEdgeManager::add_field_to_box`. Returns 1 when it was stored.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_add_field_to_box(
+    handle: *mut World,
+    x: i32,
+    y: i32,
+    field: u64,
+    collision_group: i32,
+) -> i32 {
+    match unsafe { world(handle) } {
+        Some(world) => world.add_field_to_box(x, y, field, collision_group) as i32,
+        None => 0,
+    }
+}
+
+/// Runs the fields filed in one box over a ball: reverse insertion order, the
+/// host's activeness answer, the group mask, then the host's `FieldEffect`,
+/// summing the forces that answer into `accum`. Both callbacks are required;
+/// without them (or on a null world or accumulator) nothing runs and nothing
+/// is written.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scp_world_field_effects(
+    handle: *mut World,
+    x: i32,
+    y: i32,
+    ball_mask: i32,
+    accum: *mut Vector2,
+    host: *const AbiFieldHost,
+) {
+    let (Some(world), Some(accum), Some(host)) = (
+        unsafe { world(handle) },
+        unsafe { accum.as_mut() },
+        unsafe { host.as_ref() },
+    ) else {
+        return;
+    };
+    let (Some(is_active), Some(field_effect)) = (host.is_active, host.field_effect) else {
+        return;
+    };
+    world.field_effects(
+        x,
+        y,
+        ball_mask,
+        &FieldHost {
+            userdata: host.userdata,
+            is_active,
+            field_effect,
+        },
+        accum,
+    );
 }
 
 /// Enables or disables a component. With no activeness probe installed this is

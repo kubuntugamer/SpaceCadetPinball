@@ -76,6 +76,9 @@ jobs:
       - name: Compare the Rust stuck-ball check against the C++ reference
         run: ./bin/stuck_parity
 
+      - name: Compare the Rust world's field walk against the C++ reference
+        run: ./bin/fieldwalk_parity
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

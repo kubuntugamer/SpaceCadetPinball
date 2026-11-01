@@ -51,6 +51,36 @@ static int32_t world_edge_distance(void* userData, const ScpWorldRay* ray, float
 	*distance = hit;
 	return 0;
 }
+
+// The field walk's two questions: whether a field's owner still wants it, and
+// running the component's FieldEffect. The ball stays here -- a field such as
+// the hole writes to it directly -- while the world owns the iteration, the
+// group mask and the summation.
+struct FieldWalkContext
+{
+	TBall* Ball;
+};
+
+static int32_t world_field_active(void* userData, uint64_t fieldId)
+{
+	auto field = reinterpret_cast<field_effect_type*>(fieldId);
+	return field->ActiveFlag && *field->ActiveFlag ? 1 : 0;
+}
+
+static int32_t world_field_effect(void* userData, uint64_t fieldId, ScpWorldVec2* out)
+{
+	auto context = static_cast<FieldWalkContext*>(userData);
+	vector2 vec{};
+	auto field = reinterpret_cast<field_effect_type*>(fieldId);
+	if (!field->CollisionComp->FieldEffect(context->Ball, &vec))
+	{
+		return 0;
+	}
+
+	out->X = vec.X;
+	out->Y = vec.Y;
+	return 1;
+}
 #endif
 
 TEdgeManager::TEdgeManager(float xMin, float yMin, float width, float height)
@@ -144,9 +174,16 @@ void TEdgeManager::add_field_to_box(int x, int y, field_effect_type* field)
 {
 	assertm((unsigned)x < (unsigned)MaxBoxX && (unsigned)y < (unsigned)MaxBoxY, "Box coordinates out of range");
 
+#ifdef SCP_USE_RUST_WORLD
+	// The world keeps the field lists beside the edge lists it already owns;
+	// the handle is the pointer, so the walk can hand it straight back here.
+	scp_world_add_field_to_box(World, x, y, reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(field)),
+	                           field->CollisionGroup);
+#else
 	auto& list = BoxArray[x + y * MaxBoxX].FieldList;
 	assertm(std::find(list.begin(), list.end(), field) == list.end(), "Duplicate inserted into box");
 	list.push_back(field);
+#endif
 }
 
 int TEdgeManager::TestGridBox(int x, int y, float* distPtr, TEdgeSegment** edgeDst, ray_type* ray, TBall* ball,
@@ -182,6 +219,19 @@ int TEdgeManager::TestGridBox(int x, int y, float* distPtr, TEdgeSegment** edgeD
 
 void TEdgeManager::FieldEffects(TBall* ball, vector2* dstVec)
 {
+#ifdef SCP_USE_RUST_WORLD
+	// The box's field list is the world's; the two questions a field asks stay
+	// host-side and come back through the callbacks, with the reverse walk and
+	// the summation running in Rust. The engine derives the box exactly as it
+	// always did, so both sides read the same list.
+	FieldWalkContext context{ball};
+	ScpFieldHost host{&context, &world_field_active, &world_field_effect};
+	ScpWorldVec2 accum{dstVec->X, dstVec->Y};
+	scp_world_field_effects(World, box_x(ball->Position.X), box_y(ball->Position.Y), ball->CollisionMask,
+	                        &accum, &host);
+	dstVec->X = accum.X;
+	dstVec->Y = accum.Y;
+#else
 	vector2 vec{};
 	TEdgeBox* edgeBox = &BoxArray[box_x(ball->Position.X) + box_y(ball->Position.Y) *
 		MaxBoxX];
@@ -197,6 +247,7 @@ void TEdgeManager::FieldEffects(TBall* ball, vector2* dstVec)
 			}
 		}
 	}
+#endif
 }
 
 #ifdef SCP_USE_RUST_WORLD

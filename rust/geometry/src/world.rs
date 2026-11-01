@@ -27,8 +27,8 @@ use core::marker::PhantomData;
 
 use crate::grid::{Grid, GridRay, walk_ray, walk_segment};
 use crate::{
-    Circle, Line, NO_INTERSECTION, Ray, scp_geometry_line_init, scp_geometry_ray_intersect_circle,
-    scp_geometry_ray_intersect_line,
+    Circle, Line, NO_INTERSECTION, Ray, Vector2, scp_geometry_line_init,
+    scp_geometry_ray_intersect_circle, scp_geometry_ray_intersect_line,
 };
 
 /// A handle to a value in an [`Arena`].
@@ -293,10 +293,36 @@ pub struct Hit {
     pub distance: f32,
 }
 
-/// One grid box: edges in insertion order, matching `TEdgeBox::EdgeList`.
+/// One grid box: edges in insertion order, matching `TEdgeBox::EdgeList`, and
+/// the fields registered over it in insertion order, matching
+/// `TEdgeBox::FieldList`.
 #[derive(Default)]
 struct BoxSlot {
     edges: Vec<EdgeId>,
+    fields: Vec<FieldEntry>,
+}
+
+/// One field filed in a box: the host handle behind it (`field_effect_type*`,
+/// packed) and the collision group its owner set.
+#[derive(Clone, Copy)]
+pub struct FieldEntry {
+    pub handle: u64,
+    pub collision_group: i32,
+}
+
+/// The engine's dispatch for one field walk. The activeness flag and the
+/// component behind a field are host objects, so both questions are answered
+/// through these callbacks; the walk itself only decides order, the group mask
+/// and the summation.
+pub struct FieldHost {
+    pub userdata: *mut core::ffi::c_void,
+    /// The engine's `*field->ActiveFlag` for this field.
+    pub is_active: unsafe extern "C" fn(*mut core::ffi::c_void, u64) -> i32,
+    /// Runs the owning component's `FieldEffect`, writing `out` and reporting
+    /// non-zero when the field answers. The ball stays host-side: the
+    /// component writes to it directly.
+    pub field_effect:
+        unsafe extern "C" fn(*mut core::ffi::c_void, u64, *mut Vector2) -> i32,
 }
 
 /// The owner of a loaded table's collision graph.
@@ -382,6 +408,66 @@ impl World {
 
     pub fn add_component(&mut self, collider: Collider) -> CompId {
         self.components.insert(Component::new(collider))
+    }
+
+    /// Files a field into one box, mirroring `TEdgeManager::add_field_to_box`:
+    /// insertion order is the order the table's walk produced, because the
+    /// field walk reads every box backwards. A duplicate handle in the same
+    /// box is dropped rather than pushed, matching the engine's find-then-push
+    /// under the world -- the table walks never produce one.
+    pub fn add_field_to_box(
+        &mut self,
+        x: i32,
+        y: i32,
+        handle: u64,
+        collision_group: i32,
+    ) -> bool {
+        if x < 0 || y < 0 || x >= self.max_box_x || y >= self.max_box_y {
+            return false;
+        }
+        let slot = &mut self.boxes[x as usize + y as usize * self.max_box_x as usize];
+        if slot.fields.iter().any(|entry| entry.handle == handle) {
+            return false;
+        }
+        slot.fields.push(FieldEntry {
+            handle,
+            collision_group,
+        });
+        true
+    }
+
+    /// Runs every field filed in one box over a ball, in reverse insertion
+    /// order, accumulating the forces that answer -- the body of
+    /// `TEdgeManager::FieldEffects`, with the two host questions coming back
+    /// through `host`. `accum` arrives holding whatever the caller already
+    /// summed and is added to, exactly as `maths::vector_add` did.
+    pub fn field_effects(
+        &self,
+        x: i32,
+        y: i32,
+        ball_mask: i32,
+        host: &FieldHost,
+        accum: &mut Vector2,
+    ) {
+        if x < 0 || y < 0 || x >= self.max_box_x || y >= self.max_box_y {
+            return;
+        }
+        let slot = &self.boxes[x as usize + y as usize * self.max_box_x as usize];
+        let mut out = Vector2::default();
+        for entry in slot.fields.iter().rev() {
+            // SAFETY: both callbacks are the engine's own, installed for this
+            // call, and the handle is the pointer the engine registered.
+            if unsafe { (host.is_active)(host.userdata, entry.handle) } == 0 {
+                continue;
+            }
+            if ball_mask & entry.collision_group == 0 {
+                continue;
+            }
+            if unsafe { (host.field_effect)(host.userdata, entry.handle, &mut out) } != 0 {
+                accum.x += out.x;
+                accum.y += out.y;
+            }
+        }
     }
 
     /// Registers an edge with its owner and files it into the boxes it spans.
@@ -881,5 +967,88 @@ mod tests {
         // A second cast queries it again: the epoch is per query, not cached.
         world.cast(&ray(-10.0, 5.0, 0.0, 0.0, 1.0), &[]);
         assert_eq!(CALLS.load(Ordering::Relaxed), 2);
+    }
+
+    /// Scripted field host: records the call order, answers activeness from a
+    /// per-handle flag and the effect from a per-handle value.
+    struct FieldScript {
+        flags: std::collections::HashMap<u64, bool>,
+        active_order: Vec<u64>,
+        effect_order: Vec<u64>,
+        decline: std::collections::HashMap<u64, bool>,
+    }
+
+    unsafe extern "C" fn field_is_active(userdata: *mut core::ffi::c_void, handle: u64) -> i32 {
+        // SAFETY: the test owns the script and keeps it alive for the walk.
+        let script = unsafe { &mut *(userdata as *mut FieldScript) };
+        script.active_order.push(handle);
+        i32::from(script.flags.get(&handle).copied().unwrap_or(false))
+    }
+
+    unsafe extern "C" fn field_effect(
+        userdata: *mut core::ffi::c_void,
+        handle: u64,
+        out: *mut Vector2,
+    ) -> i32 {
+        // SAFETY: as above; the out pointer is the walk's own local.
+        let script = unsafe { &mut *(userdata as *mut FieldScript) };
+        script.effect_order.push(handle);
+        if script.decline.get(&handle).copied().unwrap_or(false) {
+            return 0;
+        }
+        unsafe {
+            (*out).x = handle as f32;
+            (*out).y = -(handle as f32);
+        }
+        1
+    }
+
+    #[test]
+    fn the_field_walk_runs_boxes_backwards_masked_and_accumulating() {
+        let mut world = world();
+        // Two fields in one box, filed first-then-second; the walk must run
+        // second-then-first like the C++ rbegin loop.
+        assert!(world.add_field_to_box(3, 4, 101, 0b0010));
+        assert!(world.add_field_to_box(3, 4, 102, 0b0100));
+        // A duplicate handle in the same box is dropped, not double-run.
+        assert!(!world.add_field_to_box(3, 4, 101, 0b0010));
+        // Out-of-bounds boxes are refused rather than indexing anywhere.
+        assert!(!world.add_field_to_box(-1, 4, 103, 1));
+        assert!(!world.add_field_to_box(3, 99, 103, 1));
+
+        let mut script = FieldScript {
+            flags: [(101, true), (102, true)].into_iter().collect(),
+            active_order: Vec::new(),
+            effect_order: Vec::new(),
+            decline: [(102, true)].into_iter().collect(),
+        };
+        let host = FieldHost {
+            userdata: &mut script as *mut FieldScript as *mut core::ffi::c_void,
+            is_active: field_is_active,
+            field_effect,
+        };
+
+        // Mask sees only the first field's group; it answers, the second is
+        // never asked for its effect.
+        let mut accum = Vector2 { x: 1.5, y: -2.0 };
+        world.field_effects(3, 4, 0b0010, &host, &mut accum);
+        assert_eq!(script.active_order, vec![102, 101]);
+        assert_eq!(script.effect_order, vec![101]);
+        assert_eq!(accum, Vector2 { x: 102.5, y: -103.0 });
+
+        // A zero mask asks every field about activeness and runs nothing.
+        script.active_order.clear();
+        let mut quiet = Vector2::default();
+        world.field_effects(3, 4, 0, &host, &mut quiet);
+        assert_eq!(script.active_order, vec![102, 101]);
+        assert_eq!(quiet, Vector2 { x: 0.0, y: 0.0 });
+
+        // The other group reaches the declining field: probed, no force.
+        script.active_order.clear();
+        script.effect_order.clear();
+        let mut declined = Vector2::default();
+        world.field_effects(3, 4, 0b0100, &host, &mut declined);
+        assert_eq!(script.effect_order, vec![102]);
+        assert_eq!(declined, Vector2 { x: 0.0, y: 0.0 });
     }
 }

@@ -112,7 +112,7 @@ if(SCP_BUILD_PARITY_TESTS)
         message(FATAL_ERROR "SCP_BUILD_PARITY_TESTS requires SCP_USE_RUST_GEOMETRY")
     endif()
 
-    foreach(parity_test maths_parity edgegrid_parity proj_parity ballstep_parity stepper_parity flipper_parity flipper_collision_parity circlegrid_parity squaregrid_parity component_collision_parity field_parity throwball_parity installwall_parity edge_response_parity stuck_parity)
+    foreach(parity_test maths_parity edgegrid_parity proj_parity ballstep_parity stepper_parity flipper_parity flipper_collision_parity circlegrid_parity squaregrid_parity component_collision_parity field_parity throwball_parity installwall_parity edge_response_parity stuck_parity fieldwalk_parity)
         add_executable(${parity_test} rust/geometry/tests/${parity_test}.cpp)
         target_include_directories(${parity_test} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball")
         add_dependencies(${parity_test} spacecadet_rust_geometry)

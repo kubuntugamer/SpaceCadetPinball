@@ -32,11 +32,29 @@ struct ScpWorldHit
 	float Distance;
 };
 
+struct ScpWorldVec2
+{
+	float X;
+	float Y;
+};
+
 struct ScpWorld;
 
 typedef int32_t (*ScpWorldDistance)(void* userData, const ScpWorldRay* ray, float* distance);
 // The host's answer to "may this edge be tested?", given the packed edge id.
 typedef int32_t (*ScpWorldActive)(void* userData, uint64_t edge);
+// The host's answer to "is this field active?" and its FieldEffect run, given
+// the packed `field_effect_type*`. The effect writes `out` and reports non-zero
+// when the field answers; the ball stays host-side.
+typedef int32_t (*ScpWorldFieldActive)(void* userData, uint64_t field);
+typedef int32_t (*ScpWorldFieldEffect)(void* userData, uint64_t field, ScpWorldVec2* out);
+
+struct ScpFieldHost
+{
+	void* UserData;
+	ScpWorldFieldActive IsActive;
+	ScpWorldFieldEffect FieldEffect;
+};
 
 extern "C"
 {
@@ -80,4 +98,12 @@ extern "C"
 	size_t scp_world_component_count(ScpWorld* world);
 	int32_t scp_world_box_edge_count(ScpWorld* world, int32_t x, int32_t y);
 	size_t scp_world_box_edges(ScpWorld* world, int32_t x, int32_t y, uint64_t* out, size_t capacity);
+
+	// The field lists are the world's too: one registration per box, and the
+	// per-frame walk that sums a ball's field forces, in reverse insertion
+	// order like TEdgeManager::FieldEffects always did.
+	int32_t scp_world_add_field_to_box(ScpWorld* world, int32_t x, int32_t y, uint64_t field,
+	                                  int32_t collisionGroup);
+	void scp_world_field_effects(ScpWorld* world, int32_t x, int32_t y, int32_t ballMask,
+	                             ScpWorldVec2* accum, const ScpFieldHost* host);
 }
